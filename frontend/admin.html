@@ -19,17 +19,17 @@
     </div>
 
     <nav class="admin-nav" aria-label="Admin Navigasjon">
-      <button class="admin-nav-item active" data-view="orders">
+      <button class="admin-nav-item active" data-view="orders" data-role="admin">
         <span>📋</span> Oppdrag & Ordrer
         <span class="admin-badge-count" id="badge-new-orders">0</span>
       </button>
 
-      <button class="admin-nav-item" data-view="calendar">
-        <span>📅</span> Dagsplan & Kalender
+      <button class="admin-nav-item" data-view="calendar" id="nav-item-calendar">
+        <span>📅</span> <span id="nav-calendar-label">Dagsplan & Vaktliste</span>
       </button>
 
-      <button class="admin-nav-item" data-view="services">
-        <span>🏷️</span> Tjenester & Priser
+      <button class="admin-nav-item" data-view="my-profile" id="nav-item-my-profile">
+        <span>👷</span> <span id="nav-profile-label">Min Håndverkerprofil</span>
       </button>
 
       <button class="admin-nav-item" data-view="docs">
@@ -37,7 +37,19 @@
         <span class="admin-badge-count" style="background: #3B82F6;">250</span>
       </button>
 
-      <button class="admin-nav-item" data-view="stats">
+      <button class="admin-nav-item" data-view="employees" id="nav-item-employees" data-role="admin">
+        <span>👥</span> Håndverkere & Stillinger
+      </button>
+
+      <button class="admin-nav-item" data-view="accounting" id="nav-item-accounting" data-role="admin">
+        <span>💰</span> Regnskap & Økonomi
+      </button>
+
+      <button class="admin-nav-item" data-view="services" data-role="admin">
+        <span>🏷️</span> Tjenester & Priser
+      </button>
+
+      <button class="admin-nav-item" data-view="stats" data-role="admin">
         <span>📊</span> Nøkkeltall & Analyse
       </button>
     </nav>
@@ -83,8 +95,8 @@
 
     <main class="admin-container">
       
-      <!-- Top KPI Summary Cards -->
-      <section class="kpi-grid">
+      <!-- Top KPI Summary Cards (Admin view) -->
+      <section class="kpi-grid" id="admin-top-kpi-section">
         <div class="kpi-card">
           <span class="kpi-title">Nye Bestillinger</span>
           <div class="kpi-val" id="kpi-new-count" style="color: #EF4444;">0</div>
@@ -98,39 +110,41 @@
         </div>
 
         <div class="kpi-card">
-          <span class="kpi-title">Fullført & Fakturert</span>
+          <span class="kpi-title">Fullførte Oppdrag</span>
           <div class="kpi-val" id="kpi-done-count" style="color: #10B981;">0</div>
-          <span class="kpi-sub">Håndverkeroppdrag utført</span>
+          <span class="kpi-sub" style="color: #10B981;">Kvalitetssikret</span>
         </div>
 
         <div class="kpi-card">
-          <span class="kpi-title">Total Ordrereserve</span>
-          <div class="kpi-val" id="kpi-revenue">kr 0,-</div>
-          <span class="kpi-sub">0,- kr app-gebyrer</span>
+          <span class="kpi-title">Total Omsetning</span>
+          <div class="kpi-val" id="kpi-revenue" style="color: #0F172A;">kr 0,-</div>
+          <span class="kpi-sub" style="color: #64748B;">Håndverker fastpris</span>
         </div>
       </section>
 
-      <!-- VIEW 1: Orders Pipeline View -->
+      <!-- VIEW 1: Live Orders & Pipeline (Kanban / Table) -->
       <section id="view-orders">
         
-        <!-- Filter Tabs -->
-        <div class="filter-tabs-row">
-          <button class="filter-tab-btn active" data-status="Alle">Alle oppdrag</button>
-          <button class="filter-tab-btn" data-status="Ny bestilling">🚨 Nye bestillinger</button>
-          <button class="filter-tab-btn" data-status="Bekreftet">📅 Bekreftet</button>
-          <button class="filter-tab-btn" data-status="Håndverker tildelt">👷 Håndverker tildelt</button>
-          <button class="filter-tab-btn" data-status="På vei">🚗 På vei</button>
-          <button class="filter-tab-btn" data-status="Utført">✅ Utført</button>
-        </div>
+        <!-- Controls & Filter Tabs -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+          <div class="filter-tabs" role="tablist">
+            <button class="filter-tab-btn active" data-status="Alle">Alle oppdrag</button>
+            <button class="filter-tab-btn" data-status="Ny bestilling">🚨 Nye bestillinger</button>
+            <button class="filter-tab-btn" data-status="Bekreftet">📅 Bekreftet</button>
+            <button class="filter-tab-btn" data-status="Håndverker tildelt">👷 Tildelt</button>
+            <button class="filter-tab-btn" data-status="På vei">🚗 På vei</button>
+            <button class="filter-tab-btn" data-status="Pågår">🔨 Pågår</button>
+            <button class="filter-tab-btn" data-status="Utført">✅ Utført / Fakturert</button>
+          </div>
 
-        <!-- View Switcher (Kanban vs Table) -->
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem; gap: 0.5rem;">
-          <button id="btn-show-kanban" style="padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid var(--admin-border); background: #0F172A; color: white; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
-            📊 Kanban-tavle
-          </button>
-          <button id="btn-show-table" style="padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid var(--admin-border); background: white; color: #475569; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
-            📑 Tabellvisning
-          </button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="btn-show-kanban" style="height: 38px; padding: 0 0.85rem; border-radius: 8px; border: 1px solid var(--admin-border); background: #0F172A; color: white; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+              📊 Kanban
+            </button>
+            <button id="btn-show-table" style="height: 38px; padding: 0 0.85rem; border-radius: 8px; border: 1px solid var(--admin-border); background: white; color: #475569; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+              📑 Tabell
+            </button>
+          </div>
         </div>
 
         <!-- Kanban Board -->
@@ -138,7 +152,7 @@
           
           <div class="kanban-col" data-col="Ny bestilling">
             <div class="kanban-col-header">
-              <strong>🚨 Nye bestillinger</strong>
+              <strong>🚨 Ny bestilling</strong>
               <span class="status-badge badge-ny" id="col-count-ny">0</span>
             </div>
             <div class="kanban-cards-list" id="col-list-ny"></div>
@@ -193,15 +207,70 @@
 
       </section>
 
-      <!-- VIEW 2: Calendar & Routing View (Hidden initially) -->
+      <!-- VIEW 2: INTERACTIVE DISPATCH CALENDAR & VAKTLISTE (Hidden initially) -->
       <section id="view-calendar" style="display: none;">
-        <div class="admin-table-card" style="padding: 1.5rem;">
-          <h3 style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.2rem; font-weight: 800; margin-bottom: 1rem;">
-            📅 Håndverker Dagsplan & Ruteoversikt
-          </h3>
-          <div id="calendar-day-groups">
+        <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+          
+          <!-- Dispatch Header -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                📅 <span id="dispatch-view-heading">Håndverker Dagsplan & Vaktliste</span>
+              </h3>
+              <p style="color: #64748B; font-size: 0.88rem; margin: 0;" id="dispatch-view-subhead">
+                Oversikt over oppdrag, tidsrom, adresser og kjøreruter for hver enkelt håndverker gjennom dagen.
+              </p>
+            </div>
+
+            <!-- Date Selector & Quick Filters -->
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn-primary-sm btn-cal-quick-date active" data-date="today" style="background: #0F172A; color: white; height: 38px; padding: 0 0.85rem; border-radius: 6px; font-weight: 700; border: none; cursor: pointer;">
+                ⚡ I dag
+              </button>
+              <button class="btn-primary-sm btn-cal-quick-date" data-date="tomorrow" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); height: 38px; padding: 0 0.85rem; border-radius: 6px; font-weight: 700; cursor: pointer;">
+                ➡️ I morgen
+              </button>
+              <input type="date" id="cal-date-input" style="height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem; font-weight: 600;">
+              
+              <select id="cal-handyman-filter" style="height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem; font-weight: 600;">
+                <option value="alle">Alle håndverkere</option>
+                <!-- Rendered dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Day Summary Stats Banner -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Valgt dato</span>
+              <div style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-top: 0.25rem;" id="cal-display-date">I dag</div>
+            </div>
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Dagens Oppdrag</span>
+              <div style="font-size: 1.25rem; font-weight: 800; color: #3B82F6; margin-top: 0.25rem;" id="cal-total-jobs">0 oppdrag</div>
+            </div>
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Aktive Håndverkere</span>
+              <div style="font-size: 1.25rem; font-weight: 800; color: #059669; margin-top: 0.25rem;" id="cal-active-handymen-count">0 på jobb</div>
+            </div>
+          </div>
+
+          <!-- Unassigned Jobs Banner (Admin alert if any unassigned orders exist on this day) -->
+          <div id="cal-unassigned-banner" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.3rem;">🚨</span>
+                <strong style="color: #991B1B; font-size: 0.92rem;" id="cal-unassigned-msg">0 oppdrag mangler tildelt håndverker på denne datoen</strong>
+              </div>
+            </div>
+            <div id="cal-unassigned-list" style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
+          </div>
+
+          <!-- Handymen Dispatch Schedules Matrix -->
+          <div id="calendar-dispatch-matrix" style="display: flex; flex-direction: column; gap: 1.5rem;">
             <!-- Rendered by admin.js -->
           </div>
+
         </div>
       </section>
 
@@ -300,11 +369,340 @@
         </div>
       </section>
 
+      <!-- VIEW 6: HÅNDVERKERE, STILLINGSPROSENT & TIMELISTER (Hidden initially) -->
+      <section id="view-employees" style="display: none;">
+        <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                👥 Håndverkere & Stillingsprosent
+              </h3>
+              <p style="color: #64748B; font-size: 0.88rem; margin: 0;">
+                Oversikt over ansatte, stillingsprosent (100% = 37.5t/uke), arbeidstimer hittil denne uken, planlagte oppdrag og beregnet overtid/undertid.
+              </p>
+            </div>
+            
+            <button id="btn-open-create-employee-modal" style="height: 42px; padding: 0 1.25rem; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+              ➕ Opprett ny håndverkerprofil
+            </button>
+          </div>
+
+          <!-- Employee KPI Row -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Aktive Håndverkere</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 0.25rem;" id="kpi-emp-total">0</div>
+            </div>
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Arbeidstimer denne uken</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 0.25rem;" id="kpi-emp-worked-hours">0.0t</div>
+            </div>
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Planlagte oppdragstimer</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #3B82F6; margin-top: 0.25rem;" id="kpi-emp-scheduled-hours">0.0t</div>
+            </div>
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Total Overtid</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #15803D; margin-top: 0.25rem;" id="kpi-emp-overtime">+0.0t</div>
+            </div>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+            <input type="text" id="employee-search-input" placeholder="🔍 Søk etter håndverker, tlf, spesialitet..." style="height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.85rem; font-size: 0.9rem;">
+            
+            <select id="employee-pct-filter" style="height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+              <option value="alle">Alle stillingsprosenter</option>
+              <option value="100">100 % (37.5t/uke)</option>
+              <option value="80">80 % (30.0t/uke)</option>
+              <option value="50">50 % (18.75t/uke)</option>
+              <option value="0">📞 Tilkallingsvikar (0%)</option>
+              <option value="del">Deltid & Tilkalling (< 100%)</option>
+            </select>
+
+            <select id="employee-balance-filter" style="height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+              <option value="alle">Alle timebalanser</option>
+              <option value="overtime">🟢 Overtid (> normtid)</option>
+              <option value="on_track">🔵 I rute</option>
+              <option value="under_target">🟡 Under normtid (Gjenstående)</option>
+            </select>
+          </div>
+
+          <!-- Employee Cards Grid -->
+          <div class="employee-grid" id="employees-cards-grid">
+            <!-- Rendered by admin.js -->
+          </div>
+
+        </div>
+      </section>
+
+      <!-- VIEW 8: REGNSKAP, DRIFTSRESULTAT & UTGIFTER (Admin only) -->
+      <section id="view-accounting" style="display: none;">
+        <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+          
+          <!-- Accounting Header -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                💰 Resultatregnskap, Fortjeneste & Utgifter
+              </h3>
+              <p style="color: #64748B; font-size: 0.88rem; margin: 0;">
+                Sanntidsoversikt over inntekter, lønnskostnader, driftsutgifter, fortjenestemargin og MVA-oppgjør.
+              </p>
+            </div>
+
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+              <button id="btn-open-create-expense" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                ➕ Registrer utgift / Last opp bilag
+              </button>
+              <button id="btn-export-saf-t" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+                📥 Eksporter til regnskapsfører (CSV)
+              </button>
+            </div>
+          </div>
+
+          <!-- Top Accounting KPI Cards -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Netto Omsetning (Salg)</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #0F172A; margin: 0.25rem 0;" id="acc-rev-net">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #64748B;" id="acc-rev-gross-sub">Brutto: kr 0,- (inkl. 25% MVA)</span>
+            </div>
+
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Påløpt Lønnskostnad (YTD)</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #DC2626; margin: 0.25rem 0;" id="acc-payroll-cost">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #64748B;" id="acc-payroll-aga-sub">Bruttolønn + 14.1% AGA</span>
+            </div>
+
+            <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 1.15rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #991B1B;">📅 Fiscal Årstotal Lønn (2026)</span>
+                <span style="font-size: 0.68rem; background: #FEE2E2; color: #991B1B; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 800;">HELÅR</span>
+              </div>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #B91C1C; margin: 0.25rem 0;" id="acc-payroll-fiscal-annual">kr 0,-</div>
+              <span style="font-size: 0.73rem; color: #7F1D1D;" id="acc-payroll-fiscal-sub">Avtalt årskostnad (inkl. AGA & OTP)</span>
+            </div>
+
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Driftsutgifter & Materiell</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #EA580C; margin: 0.25rem 0;" id="acc-exp-net">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #64748B;" id="acc-exp-gross-sub">Netto varekjøp og drift</span>
+            </div>
+
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.15rem;" id="acc-profit-card">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Netto Driftsresultat / Fortjeneste</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #059669; margin: 0.25rem 0;" id="acc-net-profit">kr 0,-</div>
+              <span style="font-size: 0.75rem; font-weight: 700;" id="acc-profit-margin-sub">Margin: 0.0%</span>
+            </div>
+
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">MVA-oppgjør (Skyldig MVA)</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #2563EB; margin: 0.25rem 0;" id="acc-vat-payable">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #64748B;" id="acc-vat-sub">Utgående - Inngående MVA</span>
+            </div>
+          </div>
+
+          <!-- Section 1: Lønnsavregning & Ansattkontrakter -->
+          <div style="margin-bottom: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+              <h4 style="font-size: 1.1rem; font-weight: 800; color: #0F172A; margin: 0;">
+                👥 Lønnsavregning & Fiscal Årstotaler
+              </h4>
+              <span style="font-size: 0.8rem; color: #64748B;">Beregnet ut fra faktiske timer (YTD) og fullt fiscal-år (52 uker normtid)</span>
+            </div>
+
+            <div class="admin-table-card">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Håndverker</th>
+                    <th>Stilling & Prosent</th>
+                    <th>Normtid (Uke / År)</th>
+                    <th>Loggede Timer</th>
+                    <th>Avtalt Timesats</th>
+                    <th>Påløpt Bruttolønn</th>
+                    <th>Arb.giveravgift (14.1%)</th>
+                    <th>Påløpt Kostnad (YTD)</th>
+                    <th>📅 Fiscal Årstotal (Helår)</th>
+                    <th>Arbeidsavtale</th>
+                  </tr>
+                </thead>
+                <tbody id="acc-payroll-tbody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: Driftsutgifter & Bilag -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.75rem;">
+              <h4 style="font-size: 1.1rem; font-weight: 800; color: #0F172A; margin: 0;">
+                🧾 Registrerte Driftsutgifter & Bilag
+              </h4>
+
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <select id="acc-exp-category-filter" style="height: 36px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.84rem; font-weight: 600;">
+                  <option value="Alle">Alle kategorier</option>
+                  <option value="Materiell & Byggevarer">Materiell & Byggevarer</option>
+                  <option value="Drivstoff & Kjøretøy">Drivstoff & Kjøretøy</option>
+                  <option value="Verktøy & Utstyr">Verktøy & Utstyr</option>
+                  <option value="Forsikring & Lisenser">Forsikring & Lisenser</option>
+                  <option value="Kontor & Programvare">Kontor & Programvare</option>
+                  <option value="Markedsføring">Markedsføring</option>
+                  <option value="Annet">Annet</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-table-card">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Dato</th>
+                    <th>Beskrivelse / Tittel</th>
+                    <th>Leverandør</th>
+                    <th>Kategori</th>
+                    <th>Brutto (kr)</th>
+                    <th>MVA-sats</th>
+                    <th>Netto (kr)</th>
+                    <th>MVA (kr)</th>
+                    <th>Bilag / Notat</th>
+                    <th>Handling</th>
+                  </tr>
+                </thead>
+                <tbody id="acc-expenses-tbody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- VIEW 7: DEDIKERT HÅNDVERKERPROFIL & PERSONLIG TIMEKORT (Hidden initially) -->
+      <section id="view-my-profile" style="display: none;">
+        <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+          
+          <!-- Handyman Profile Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--admin-border); margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <div id="hp-avatar" style="font-size: 2.8rem; background: #F1F5F9; width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--admin-border);">👷</div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <h3 id="hp-name" style="font-size: 1.4rem; font-weight: 800; color: #0F172A; margin: 0;">Lars Snekker</h3>
+                  <span id="hp-status-badge" class="status-badge badge-tildelt">På oppdrag</span>
+                </div>
+                <div style="font-size: 0.88rem; color: #64748B; margin-top: 0.2rem;">
+                  <span id="hp-specialty">Snekker, Montering & Dører</span> &nbsp;•&nbsp; 
+                  <span id="hp-phone" style="font-weight: 600; color: #0F172A;">📞 912 34 567</span> &nbsp;•&nbsp;
+                  <span id="hp-email">lars@servida.no</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Employment Percentage Pill -->
+            <div style="text-align: right;">
+              <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Avtale & Stillingsprosent</div>
+              <div style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-top: 0.15rem;" id="hp-pct-label">
+                100 % (37.5t / uke)
+              </div>
+            </div>
+          </div>
+
+          <!-- Weekly Hours Progress Banner -->
+          <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                <strong style="font-size: 0.95rem; color: #0F172A;">Ukentlig Arbeidstidsstatus (Denne uken)</strong>
+                <span style="font-size: 0.82rem; color: #64748B; display: block;">100% stilling tilsvarer 37.5 timer</span>
+              </div>
+              <div id="hp-balance-badge" class="badge-overtime" style="font-size: 0.88rem; padding: 0.35rem 0.75rem;">
+                +2.0t overtid
+              </div>
+            </div>
+
+            <div class="time-progress-track" style="height: 12px;">
+              <div class="time-progress-fill" id="hp-progress-fill" style="width: 100%; background: #10B981;"></div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: #475569; margin-top: 0.35rem;">
+              <span>Arbeidet hittil: <strong id="hp-worked-hours-val" style="color: #0F172A;">39.5t</strong></span>
+              <span>Ukesmål: <strong id="hp-target-hours-val">37.5t</strong></span>
+            </div>
+          </div>
+
+          <!-- Two Column Grid: Left = Assigned Orders, Right = Log Hours & History -->
+          <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.5rem;">
+            
+            <!-- Left Column: Assigned Upcoming Orders -->
+            <div>
+              <h4 style="font-size: 1.1rem; font-weight: 800; color: #0F172A; margin: 0 0 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+                <span>📅 Mine Tildelte Oppdrag & Kjøreliste</span>
+                <span id="hp-active-orders-count-badge" style="font-size: 0.78rem; background: #EFF6FF; color: #1D4ED8; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 700;">2 aktive</span>
+              </h4>
+
+              <div id="hp-assigned-orders-list">
+                <!-- Rendered by admin.js -->
+              </div>
+            </div>
+
+            <!-- Right Column: Hour Registration & Hour Logs -->
+            <div>
+              <!-- Quick Hour Log Box -->
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem;">
+                <h4 style="font-size: 1rem; font-weight: 800; color: #0F172A; margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
+                  ⏱️ Før Arbeidstimer
+                </h4>
+                
+                <form id="form-handyman-log-hours" onsubmit="return false;">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.6rem;">
+                    <div>
+                      <label style="font-size: 0.75rem; font-weight: 700; color: #475569;">Dato</label>
+                      <input type="date" id="hp-log-date" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem;">
+                    </div>
+                    <div>
+                      <label style="font-size: 0.75rem; font-weight: 700; color: #475569;">Antall timer</label>
+                      <input type="number" id="hp-log-hours" step="0.5" min="0.5" max="24" placeholder="F.eks 7.5" required style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem; font-weight: 700;">
+                    </div>
+                  </div>
+
+                  <div style="margin-bottom: 0.75rem;">
+                    <label style="font-size: 0.75rem; font-weight: 700; color: #475569;">Arbeidsbeskrivelse / Oppdrag</label>
+                    <input type="text" id="hp-log-desc" placeholder="F.eks: Montering av ytterdør hos Hansen" required style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.85rem;">
+                  </div>
+
+                  <button type="submit" id="btn-submit-handyman-hours" style="width: 100%; height: 40px; background: #059669; color: white; border: none; border-radius: 6px; font-weight: 700; font-size: 0.88rem; cursor: pointer;">
+                    💾 Registrer timer
+                  </button>
+                </form>
+              </div>
+
+              <!-- Hour Logs History -->
+              <div>
+                <h4 style="font-size: 0.95rem; font-weight: 800; color: #0F172A; margin: 0 0 0.5rem;">
+                  📜 Nylige timeregistreringer
+                </h4>
+                <div id="hp-hours-history-list" style="max-height: 260px; overflow-y: auto; background: white; border: 1px solid var(--admin-border); border-radius: 10px; padding: 0.5rem;">
+                  <!-- Rendered by admin.js -->
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
     </main>
   </div>
 
   <!-- Order Detail & Handyman Drawer -->
-  <div class="drawer-overlay" id="order-drawer" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="drawer-overlay" id="order-drawer" style="display: none;" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="drawer-panel">
       <button class="drawer-close-btn" id="drawer-close-btn">✕</button>
       
@@ -514,9 +912,37 @@
 
 
   <!-- ==========================================================================
+       PDF VIEWER MODAL
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="pdf-viewer-modal" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 960px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
+      <!-- Modal Header -->
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--admin-border); display: flex; justify-content: space-between; align-items: center; background: #F8FAFC;">
+        <div>
+          <h3 id="pdf-viewer-title" style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 0.2rem;">Dokumenttittel</h3>
+          <span id="pdf-viewer-subtitle" style="font-size: 0.78rem; color: #64748B; font-weight: 600;">Kategori • Servida Håndbok</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <a id="pdf-direct-download-btn" href="#" download class="btn-primary-sm" style="background: #0F172A; color: white; text-decoration: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">
+            ⬇️ Last ned PDF
+          </a>
+          <a id="pdf-open-new-tab-btn" href="#" target="_blank" class="btn-primary-sm" style="background: #3B82F6; color: white; text-decoration: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">
+            ↗️ Åpne i ny fane
+          </a>
+          <button id="btn-close-pdf-viewer" style="background: #E2E8F0; border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 1rem; cursor: pointer; font-weight: bold; margin-left: 0.5rem;">✕</button>
+        </div>
+      </div>
+      <!-- PDF Iframe -->
+      <div style="flex: 1; width: 100%; background: #525659;">
+        <iframe id="pdf-iframe-element" src="about:blank" style="width: 100%; height: 100%; border: none;"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
        GEMINI AI SERVICE CREATOR MODAL
        ========================================================================== -->
-  <div class="drawer-overlay" id="ai-service-creator-modal" style="display: none; align-items: center; justify-content: center; z-index: 10000; padding: 1.5rem;">
+  <div class="admin-modal-overlay" id="ai-service-creator-modal" style="display: none;">
     <div style="background: white; border-radius: 16px; width: 100%; max-width: 820px; max-height: 90vh; overflow-y: auto; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); position: relative;">
       <button id="btn-close-ai-creator" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 1.1rem; cursor: pointer;">✕</button>
 
@@ -643,7 +1069,7 @@
   <!-- ==========================================================================
        GEMINI API KEY CONFIG MODAL
        ========================================================================== -->
-  <div class="drawer-overlay" id="ai-config-modal" style="display: none; align-items: center; justify-content: center; z-index: 10000; padding: 1.5rem;">
+  <div class="admin-modal-overlay" id="ai-config-modal" style="display: none;">
     <div style="background: white; border-radius: 16px; width: 100%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); position: relative;">
       <button id="btn-close-ai-config" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
 
@@ -662,40 +1088,400 @@
         <span id="ai-key-status-label" style="font-size: 0.75rem; color: #059669; font-weight: 600; display: block; margin-top: 0.35rem;"></span>
       </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem;">
-        <button id="btn-save-ai-key" style="width: 100%; height: 44px; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
-          💾 Lagre API-nøkkel
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.25rem;">
+        <button id="btn-save-ai-key" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 700; cursor: pointer;">
+          💾 Lagre nøkkel
         </button>
       </div>
     </div>
   </div>
 
-  <!-- IN-BROWSER PDF VIEWER MODAL -->
-  <div class="drawer-overlay" id="pdf-viewer-modal" style="display: none; align-items: center; justify-content: center; z-index: 10000; padding: 1.5rem;">
-    <div style="background: white; border-radius: 16px; width: 100%; max-width: 960px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
-      
-      <!-- Viewer Header -->
-      <div style="padding: 1rem 1.5rem; background: #0F172A; color: white; display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; overflow: hidden;">
-          <span style="font-size: 1.4rem;">📄</span>
-          <div style="overflow: hidden;">
-            <h4 id="pdf-viewer-title" style="margin: 0; font-size: 1rem; font-weight: 700; color: white; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Dokument</h4>
-            <span id="pdf-viewer-subtitle" style="font-size: 0.75rem; color: #94A3B8;">Servida PDF Arkiv</span>
+  <!-- ==========================================================================
+       CREATE NEW HANDYMAN / EMPLOYEE MODAL
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-create-employee" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
+      <button id="btn-close-create-employee" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+
+      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
+        <span style="font-size: 1.6rem;">👷</span>
+        <h3 style="font-size: 1.3rem; font-weight: 800; color: #0F172A; margin: 0;">Opprett ny håndverkerprofil</h3>
+      </div>
+      <p style="color: #64748B; font-size: 0.85rem; margin-bottom: 1.5rem;">
+        Legg til en ny ansatt i Servida med stillingsprosent (f.eks 100% = 37.5t/uke), fagfelt og innloggingsdetaljer.
+      </p>
+
+      <form id="form-create-employee" onsubmit="return false;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">Fullt navn *</label>
+            <input type="text" id="new-emp-name" placeholder="F.eks. Jonas Berg" required style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.9rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">Telefonnummer *</label>
+            <input type="text" id="new-emp-phone" placeholder="F.eks. 987 65 432" required style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.9rem;">
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <a id="pdf-direct-download-btn" href="#" target="_blank" download class="btn-primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; background: #3B82F6; color: white; text-decoration: none; border-radius: 6px; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
-            ⬇️ Last ned PDF
-          </a>
-          <button id="btn-close-pdf-viewer" style="background: rgba(255,255,255,0.15); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem;">✕</button>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">E-postadresse (Brukernavn) *</label>
+            <input type="email" id="new-emp-email" placeholder="jonas@servida.no" required style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.9rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">Passord *</label>
+            <input type="password" id="new-emp-password" placeholder="••••••••" required style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.9rem;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">
+              Stillingsprosent *
+            </label>
+            <select id="new-emp-pct" style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.9rem; font-weight: 700;">
+              <option value="100" selected>100 % Fast Stilling (37.5 timer/uke)</option>
+              <option value="80">80 % Stilling (30.0 timer/uke)</option>
+              <option value="60">60 % Stilling (22.5 timer/uke)</option>
+              <option value="50">50 % Stilling (18.75 timer/uke)</option>
+              <option value="20">20 % Stilling (7.5 timer/uke)</option>
+              <option value="0">📞 0 % – Tilkallingsvikar / Ekstrahjelp (Arbeid etter behov)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">
+              Fagfelt & Spesialitet
+            </label>
+            <input type="text" id="new-emp-specialty" placeholder="F.eks. Tømrer & Montering" style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.9rem;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">Timesats (NOK/t)</label>
+            <input type="number" id="new-emp-rate" value="380" style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.9rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">Ikon / Avatar</label>
+            <select id="new-emp-avatar" style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 1.1rem;">
+              <option value="👷">👷 Bygg & Montering</option>
+              <option value="🔧">🔧 Mekaniker & Maskin</option>
+              <option value="⚡">⚡ Elektriker & Smart</option>
+              <option value="🚿">🚿 VVS & Rør</option>
+              <option value="🎨">🎨 Maling & Gulv</option>
+              <option value="🌿">🌿 Hage & Utemiljø</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #0F172A; display: block; margin-bottom: 0.35rem;">Erfaring / Sertifikater (Bio)</label>
+          <textarea id="new-emp-bio" rows="2" placeholder="Fagbrev, sertifikater, spesialkompetanse..." style="width: 100%; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0.5rem 0.75rem; font-size: 0.85rem;"></textarea>
+        </div>
+
+        <div id="create-emp-error-msg" style="color: #DC2626; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.75rem; display: none;"></div>
+
+        <button type="submit" id="btn-submit-create-employee" style="width: 100%; height: 46px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
+          💾 Opprett håndverkerprofil
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       LOG HOURS MODAL (ADMIN TO EMPLOYEE)
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-log-hours" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
+      <button id="btn-close-log-hours" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+
+      <h3 style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;" id="modal-log-hours-title">
+        ⏱️ Før timer for Ansatt
+      </h3>
+      <p style="color: #64748B; font-size: 0.85rem; margin-bottom: 1.25rem;" id="modal-log-hours-subtitle">
+        Registrer utført arbeidstid som oppdaterer ukentlig timebalanse.
+      </p>
+
+      <form id="form-admin-log-hours" onsubmit="return false;">
+        <input type="hidden" id="admin-log-emp-id">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">Dato</label>
+            <input type="date" id="admin-log-date" required style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.88rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">Antall timer</label>
+            <input type="number" id="admin-log-hours-val" step="0.5" min="0.5" max="24" required placeholder="F.eks. 7.5" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.88rem; font-weight: 700;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">Arbeidsbeskrivelse</label>
+          <input type="text" id="admin-log-desc" required placeholder="F.eks. Montering av ytterdør hos Hansen" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+        </div>
+
+        <button type="submit" id="btn-save-admin-log-hours" style="width: 100%; height: 44px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer;">
+          💾 Før timer
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       EDIT EMPLOYEE MODAL
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-edit-employee" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 520px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
+      <button id="btn-close-edit-employee" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+
+      <h3 style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">
+        ✏️ Rediger håndverkerprofil
+      </h3>
+      <p style="color: #64748B; font-size: 0.85rem; margin-bottom: 1.25rem;">
+        Juster stillingsprosent (37.5t norm), telefonnummer, spesialitet eller timesats.
+      </p>
+
+      <form id="form-edit-employee" onsubmit="return false;">
+        <input type="hidden" id="edit-emp-id">
+
+        <div style="margin-bottom: 0.75rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Navn</label>
+          <input type="text" id="edit-emp-name" required style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.9rem; font-weight: 700;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Telefon</label>
+            <input type="text" id="edit-emp-phone" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Status</label>
+            <select id="edit-emp-status" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.88rem; font-weight: 600;">
+              <option value="Aktiv">🟢 Aktiv</option>
+              <option value="Tilkalling">📞 Tilkalling / På vakt</option>
+              <option value="På oppdrag">🔨 På oppdrag</option>
+              <option value="Ferie">🏖️ Ferie / Fravær</option>
+              <option value="Permisjon">⏸️ Permisjon</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Stillingsprosent</label>
+            <select id="edit-emp-pct" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.88rem; font-weight: 700;">
+              <option value="100">100 % (37.5t/uke)</option>
+              <option value="80">80 % (30.0t/uke)</option>
+              <option value="60">60 % (22.5t/uke)</option>
+              <option value="50">50 % (18.75t/uke)</option>
+              <option value="20">20 % (7.5t/uke)</option>
+              <option value="0">📞 0 % – Tilkallingsvikar (Etter behov)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Timesats (kr/t)</label>
+            <input type="number" id="edit-emp-rate" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Spesialitet</label>
+          <input type="text" id="edit-emp-specialty" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Bio / Erfaring</label>
+          <textarea id="edit-emp-bio" rows="2" style="width: 100%; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0.4rem 0.6rem; font-size: 0.85rem;"></textarea>
+        </div>
+
+        <button type="submit" id="btn-save-edit-employee" style="width: 100%; height: 44px; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer;">
+          💾 Lagre endringer
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       CREATE EXPENSE MODAL (REGNSKAP & BILAG)
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-create-expense" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 520px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
+      <button id="btn-close-create-expense" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+
+      <h3 style="font-size: 1.3rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">
+        ➕ Registrer ny utgift / Last opp bilag
+      </h3>
+      <p style="color: #64748B; font-size: 0.85rem; margin-bottom: 1.25rem;">
+        Legg til varekjøp, verktøy, drivstoff eller driftskostnader. MVA og netto beregnes automatisk.
+      </p>
+
+      <form id="form-create-expense" onsubmit="return false;">
+        <div style="margin-bottom: 0.75rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Beskrivelse / Vare *</label>
+          <input type="text" id="new-exp-title" required placeholder="F.eks. Karmskruer og fugeskum" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem; font-weight: 600;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Leverandør / Butikk *</label>
+            <input type="text" id="new-exp-vendor" required placeholder="F.eks. Montér, Maxbo, Circle K" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Kategori *</label>
+            <select id="new-exp-category" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.86rem; font-weight: 600;">
+              <option value="Materiell & Byggevarer">Materiell & Byggevarer</option>
+              <option value="Drivstoff & Kjøretøy">Drivstoff & Kjøretøy</option>
+              <option value="Verktøy & Utstyr">Verktøy & Utstyr</option>
+              <option value="Forsikring & Lisenser">Forsikring & Lisenser</option>
+              <option value="Kontor & Programvare">Kontor & Programvare</option>
+              <option value="Markedsføring">Markedsføring</option>
+              <option value="Annet">Annet</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Beløp inkl. MVA (NOK) *</label>
+            <input type="number" id="new-exp-amount" step="0.5" min="1" required placeholder="F.eks. 1490" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.95rem; font-weight: 800; color: #0F172A;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">MVA-sats</label>
+            <select id="new-exp-vat" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.88rem; font-weight: 600;">
+              <option value="25.0" selected>25 % (Standard)</option>
+              <option value="15.0">15 % (Næringsmidler)</option>
+              <option value="0.0">0 % (Fritatt / Forsikring)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Dato</label>
+            <input type="date" id="new-exp-date" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Fakturanr / Bilagsreferanse</label>
+          <input type="text" id="new-exp-notes" placeholder="F.eks. Faktura #98124 eller korttransaksjon" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+        </div>
+
+        <button type="submit" id="btn-save-create-expense" style="width: 100%; height: 46px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
+          💾 Lagre utgift i regnskapet
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       EMPLOYMENT CONTRACT MODAL & GENERATOR (ARBEIDSAVTALE AML § 14-6)
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-contract-viewer" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 780px; padding: 2.25rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto;">
+      <button id="btn-close-contract-viewer" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0F172A; padding-bottom: 1rem; margin-bottom: 1.5rem;">
+        <div>
+          <h2 style="font-size: 1.5rem; font-weight: 900; color: #0F172A; margin: 0;">ARBEIDSAVTALE / ANSETTELSESKONTRAKT</h2>
+          <span style="font-size: 0.82rem; color: #64748B; font-weight: 600;">I henhold til Arbeidsmiljøloven § 14-6 (Norsk standard)</span>
+        </div>
+        <div style="text-align: right;">
+          <strong style="font-family: monospace; font-size: 1.1rem; color: #0F172A;" id="ctr-number-badge">CTR-2026-001</strong>
+          <div style="font-size: 0.75rem; color: #059669; font-weight: 700;" id="ctr-status-badge">Signert & Aktiv</div>
         </div>
       </div>
 
-      <!-- Iframe Content -->
-      <div style="flex: 1; background: #525659; position: relative;">
-        <iframe id="pdf-iframe-element" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+      <div id="contract-content-box" style="font-size: 0.9rem; line-height: 1.6; color: #1E293B;">
+        
+        <!-- Part 1: Partene -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 800; color: #0F172A;">1. PARTENE I AVTALEN</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <strong>Arbeidsgiver:</strong><br>
+              Servida AS<br>
+              Org.nr: 932 847 192 MVA<br>
+              Servida Hovedkontor, 5000 Bergen
+            </div>
+            <div>
+              <strong>Arbeidstaker:</strong><br>
+              <span id="ctr-emp-name" style="font-weight: 700; color: #0F172A;">Lars Snekker</span><br>
+              E-post: <span id="ctr-emp-email">lars@servida.no</span><br>
+              Telefon: <span id="ctr-emp-phone">912 34 567</span><br>
+              Adresse: <span id="ctr-emp-address">Bergen</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Part 2: Stilling & Arbeidssted -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 800; color: #0F172A;">2. STILLINGSOMFANG, ARBEIDSSTED & TILTREDELSE</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              • <strong>Stilling:</strong> <span id="ctr-position">Tømrer & Montør</span><br>
+              • <strong>Tiltredelsesdato:</strong> <span id="ctr-start-date">2026-01-01</span><br>
+              • <strong>Prøvetid:</strong> <span id="ctr-probation">6 måneder</span>
+            </div>
+            <div>
+              • <strong>Stillingsprosent:</strong> <span id="ctr-pct" style="font-weight: 800; color: #059669;">100 %</span><br>
+              • <strong>Ukentlig arbeidstid:</strong> <span id="ctr-weekly-hours" style="font-weight: 800; color: #0F172A;">37.5 timer</span> (7.5 t/dag)<br>
+              • <strong>Arbeidssted:</strong> <span id="ctr-workplace">Bergen og omegn (Kundelokasjoner)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Part 3: Lønn & Satser -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 800; color: #0F172A;">3. LØNNSVILKÅR & OVERTIDSGODTGJØRELSE</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              • <strong>Avtalt timesats:</strong> <span id="ctr-hourly-rate" style="font-weight: 800; color: #0F172A;">kr 380,00</span> per time<br>
+              • <strong>Lønnsutbetaling:</strong> Den 15. i hver måned<br>
+              • <strong>Feriepenger:</strong> 10.2 % (12.0 % for 5 uker)
+            </div>
+            <div>
+              • <strong>Overtidstillegg:</strong> 40 % tillegg etter AML § 10-6<br>
+              • <strong>Arbeidsgiveravgift:</strong> Innbetales iht. Sone 1 (14.1%)<br>
+              • <strong>Oppsigelsesfrist:</strong> <span id="ctr-notice">1 måned (14 dager i prøvetid)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Part 4: Særlige vilkår -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 800; color: #0F172A;">4. SÆRLIGE BESTEMMELSER & GODTGJØRELSER</h4>
+          <p id="ctr-special-terms" style="margin: 0; color: #475569;">
+            Fast ansettelse med firmabil og verktøygodtgjørelse. Arbeidstaker forplikter seg til å følge Servida AS sine HMS-rutiner og etiske retningslinjer.
+          </p>
+        </div>
+
+        <!-- Signatures -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px dashed var(--admin-border);">
+          <div style="border-top: 1px solid #94A3B8; padding-top: 0.5rem;">
+            <strong>For Servida AS (Arbeidsgiver)</strong><br>
+            <span style="font-size: 0.8rem; color: #64748B;">Daglig leder / Servida Administrator</span>
+          </div>
+          <div style="border-top: 1px solid #94A3B8; padding-top: 0.5rem;">
+            <strong>Arbeidstaker</strong><br>
+            <span style="font-size: 0.8rem; color: #64748B;" id="ctr-sig-name">Lars Snekker</span>
+          </div>
+        </div>
+
       </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.75rem; border-top: 1px solid var(--admin-border); padding-top: 1.25rem;">
+        <button id="btn-print-contract" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+          🖨️ Skriv ut / Lagre som PDF
+        </button>
+        <button id="btn-save-contract-db" style="background: #059669; color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+          💾 Lagre & Aktiver i Regnskap
+        </button>
+      </div>
+
     </div>
   </div>
 

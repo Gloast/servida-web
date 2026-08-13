@@ -3,6 +3,7 @@ import os
 import json
 import sqlite3
 import random
+import urllib.parse
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -600,6 +601,129 @@ async def get_orders(status: Optional[str] = None, search: Optional[str] = None,
     conn.close()
     return {"orders": orders, "count": len(orders)}
 
+
+@app.get("/api/calendar/dispatch")
+async def get_calendar_dispatch(date: Optional[str] = None, handyman: Optional[str] = None):
+    """Returns structured multi-job schedule per handyman for a given day or date range."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    target_date = date.strip() if date and date != "alle" else datetime.now().strftime("%Y-%m-%d")
+    
+    # Get all handymen
+    cursor.execute("SELECT id, full_name, phone, role, handyman_specialty, avatar_url, status FROM users WHERE role = 'handyman' ORDER BY full_name ASC")
+    handymen_rows = cursor.fetchall()
+    
+    schedules = []
+    total_day_jobs_count = 0
+    total_day_revenue = 0.0
+    
+    for h in handymen_rows:
+        h_name = h["full_name"]
+        
+        # If handyman filter specified, skip others
+        if handyman and handyman != "alle" and handyman not in h_name:
+            continue
+            
+        cursor.execute("""
+        SELECT * FROM orders
+        WHERE (assigned_handyman = ? OR assigned_handyman LIKE ?)
+          AND preferred_date = ?
+        ORDER BY time_slot ASC, id ASC
+        """, (h_name, f"%{h_name}%", target_date))
+        
+        order_rows = cursor.fetchall()
+        jobs = []
+        estimated_hours = 0.0
+        
+        for r in order_rows:
+            try:
+                options = json.loads(r["selected_options"]) if r["selected_options"] else []
+            except:
+                options = []
+                
+            map_query = f"{r['street_address']}, {r['postal_code']} {r['city']}"
+            map_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_query)}"
+            
+            # Estimate 2.5 hours per job if not specified
+            est_h = 2.5
+            estimated_hours += est_h
+            total_day_revenue += r["total_price"]
+            
+            jobs.append({
+                "id": r["id"],
+                "order_number": r["order_number"],
+                "service_title": r["service_title"],
+                "variant_name": r["variant_name"] or "Standard",
+                "time_slot": r["time_slot"],
+                "customer_name": r["customer_name"],
+                "customer_phone": r["customer_phone"],
+                "street_address": r["street_address"],
+                "postal_code": r["postal_code"],
+                "city": r["city"],
+                "full_address": f"{r['street_address']}, {r['postal_code']} {r['city']}",
+                "map_url": map_url,
+                "total_price": r["total_price"],
+                "status": r["status"],
+                "payment_status": r["payment_status"],
+                "notes": r["notes"] or "",
+                "handyman_notes": r["handyman_notes"] or "",
+                "estimated_hours": est_h
+            })
+            
+        total_day_jobs_count += len(jobs)
+        
+        schedules.append({
+            "handyman_id": h["id"],
+            "handyman_name": h_name,
+            "phone": h["phone"] or "",
+            "specialty": h["handyman_specialty"] or "Handyman",
+            "avatar_url": h["avatar_url"] or "👷",
+            "status": h["status"] or "Aktiv",
+            "total_jobs": len(jobs),
+            "estimated_daily_hours": round(estimated_hours, 1),
+            "jobs": jobs
+        })
+        
+    # Also fetch unassigned jobs for this day
+    cursor.execute("""
+    SELECT * FROM orders
+    WHERE (assigned_handyman = 'Ikke tildelt' OR assigned_handyman IS NULL OR assigned_handyman = '')
+      AND preferred_date = ?
+    ORDER BY time_slot ASC, id ASC
+    """, (target_date,))
+    unassigned_rows = cursor.fetchall()
+    unassigned_jobs = []
+    for r in unassigned_rows:
+        map_query = f"{r['street_address']}, {r['postal_code']} {r['city']}"
+        unassigned_jobs.append({
+            "id": r["id"],
+            "order_number": r["order_number"],
+            "service_title": r["service_title"],
+            "variant_name": r["variant_name"] or "Standard",
+            "time_slot": r["time_slot"],
+            "customer_name": r["customer_name"],
+            "customer_phone": r["customer_phone"],
+            "street_address": r["street_address"],
+            "postal_code": r["postal_code"],
+            "city": r["city"],
+            "full_address": f"{r['street_address']}, {r['postal_code']} {r['city']}",
+            "map_url": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_query)}",
+            "total_price": r["total_price"],
+            "status": r["status"]
+        })
+        
+    conn.close()
+    
+    return {
+        "date": target_date,
+        "total_jobs": total_day_jobs_count + len(unassigned_jobs),
+        "total_revenue": round(total_day_revenue, 2),
+        "schedules": schedules,
+        "unassigned_jobs": unassigned_jobs
+    }
+
+
 @app.get("/api/orders/{order_number_or_id}")
 async def get_single_order(order_number_or_id: str):
     conn = get_db_connection()
@@ -1083,5 +1207,763 @@ async def list_pdf_docs(
         "categories": categories,
         "docs": docs
     }
+
+
+# ==========================================================================
+# EMPLOYEE MANAGEMENT & WORK HOURS TRACKING CONTROLLER
+# ==========================================================================
+
+class EmployeeCreate(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    phone: Optional[str] = ""
+    handyman_specialty: Optional[str] = "Allround Handyman"
+    employment_percentage: Optional[int] = 100
+    hourly_rate: Optional[float] = 350.0
+    bio: Optional[str] = ""
+    avatar_url: Optional[str] = "👷"
+
+class EmployeeUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    handyman_specialty: Optional[str] = None
+    employment_percentage: Optional[int] = None
+    hourly_rate: Optional[float] = None
+    status: Optional[str] = None
+    bio: Optional[str] = None
+    password: Optional[str] = None
+
+class HourLogCreate(BaseModel):
+    user_id: int
+    work_date: str
+    hours_spent: float
+    description: str
+    order_id: Optional[int] = None
+
+
+@app.get("/api/employees")
+async def list_employees():
+    """Returns list of all handymen and employees with calculated hours, target hours, and balance."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+    SELECT id, email, full_name, phone, street_address, postal_code, city, role, 
+           handyman_specialty, avatar_url, created_at, employment_percentage, 
+           target_weekly_hours, hourly_rate, status, bio
+    FROM users 
+    WHERE role IN ('handyman', 'admin')
+    ORDER BY role ASC, full_name ASC
+    """)
+    rows = cursor.fetchall()
+    
+    employees = []
+    for r in rows:
+        uid = r["id"]
+        pct = r["employment_percentage"] if r["employment_percentage"] is not None else 100
+        target_hours = round((pct / 100.0) * 37.5, 2)
+        
+        # Calculate worked hours this week from work_hours_log
+        cursor.execute("""
+        SELECT COALESCE(SUM(hours_spent), 0.0)
+        FROM work_hours_log
+        WHERE user_id = ?
+        """, (uid,))
+        worked_hours = float(cursor.fetchone()[0])
+        
+        # Calculate active assigned orders count and estimated scheduled hours
+        cursor.execute("""
+        SELECT COUNT(*), COALESCE(SUM(total_price), 0.0)
+        FROM orders
+        WHERE (assigned_handyman = ? OR assigned_handyman LIKE ?)
+          AND status IN ('Ny bestilling', 'Bekreftet', 'Håndverker tildelt', 'På vei', 'Pågår')
+        """, (r["full_name"], f"%{r['full_name']}%"))
+        active_row = cursor.fetchone()
+        active_orders_count = active_row[0]
+        
+        # Estimated scheduled hours: 2.5 hours per active assigned order
+        scheduled_hours = round(active_orders_count * 2.5, 1)
+        
+        # Calculate completed orders count
+        cursor.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE (assigned_handyman = ? OR assigned_handyman LIKE ?)
+          AND status IN ('Utført', 'Fakturert')
+        """, (r["full_name"], f"%{r['full_name']}%"))
+        completed_orders_count = cursor.fetchone()[0]
+        
+        # Time balance: worked vs target
+        if pct == 0:
+            balance = worked_hours
+            balance_label = f"{worked_hours}t arbeidet (Tilkalling)"
+            balance_status = "on_call"
+        else:
+            balance = round(worked_hours - target_hours, 1)
+            if balance > 0:
+                balance_label = f"+{balance}t overtid"
+                balance_status = "overtime"
+            elif balance == 0:
+                balance_label = "0.0t (I rute)"
+                balance_status = "on_track"
+            else:
+                balance_label = f"{balance}t (Gjenstående)"
+                balance_status = "under_target"
+            
+        employees.append({
+            "id": uid,
+            "email": r["email"],
+            "full_name": r["full_name"],
+            "phone": r["phone"] or "",
+            "role": r["role"],
+            "handyman_specialty": r["handyman_specialty"] or "Allround",
+            "avatar_url": r["avatar_url"] or ("👑" if r["role"] == "admin" else "👷"),
+            "employment_percentage": pct,
+            "target_weekly_hours": target_hours,
+            "hourly_rate": r["hourly_rate"] or 350.0,
+            "status": r["status"] or ("Tilkalling" if pct == 0 else "Aktiv"),
+            "bio": r["bio"] or "",
+            "worked_hours_this_week": worked_hours,
+            "scheduled_hours_this_week": scheduled_hours,
+            "time_balance": balance,
+            "balance_label": balance_label,
+            "balance_status": balance_status,
+            "active_orders_count": active_orders_count,
+            "completed_orders_count": completed_orders_count
+        })
+        
+    conn.close()
+    return {"employees": employees}
+
+
+@app.post("/api/employees")
+async def create_employee(payload: EmployeeCreate):
+    """Creates a new handyman employee profile with employment percentage and weekly target hours."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check if email exists
+    cursor.execute("SELECT id FROM users WHERE email = ?", (payload.email.strip().lower(),))
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="En bruker med denne e-postadressen eksisterer allerede.")
+        
+    pct = payload.employment_percentage if payload.employment_percentage is not None else 100
+    target_hours = round((pct / 100.0) * 37.5, 2) if pct > 0 else 0.0
+    pwd_hash = hash_password(payload.password)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    cursor.execute("""
+    INSERT INTO users (
+        email, password_hash, full_name, phone, role, handyman_specialty, 
+        avatar_url, created_at, employment_percentage, target_weekly_hours, 
+        hourly_rate, status, bio
+    ) VALUES (?, ?, ?, ?, 'handyman', ?, ?, ?, ?, ?, ?, 'Aktiv', ?)
+    """, (
+        payload.email.strip().lower(),
+        pwd_hash,
+        payload.full_name.strip(),
+        payload.phone.strip(),
+        payload.handyman_specialty.strip(),
+        payload.avatar_url or ("⏱️" if pct == 0 else "👷"),
+        now_str,
+        pct,
+        target_hours,
+        payload.hourly_rate or 350.0,
+        payload.bio.strip() if payload.bio else ""
+    ))
+    
+    new_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return {
+        "success": True,
+        "message": f"Håndverker {payload.full_name} ({pct}% stilling) er nå opprettet!",
+        "employee_id": new_id
+    }
+
+
+@app.put("/api/employees/{employee_id}")
+async def update_employee(employee_id: int, payload: EmployeeUpdate):
+    """Updates an employee profile, employment percentage, specialty, and hourly rate."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM users WHERE id = ?", (employee_id,))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Ansatt ikke funnet.")
+        
+    full_name = payload.full_name if payload.full_name is not None else user["full_name"]
+    phone = payload.phone if payload.phone is not None else user["phone"]
+    specialty = payload.handyman_specialty if payload.handyman_specialty is not None else user["handyman_specialty"]
+    status_val = payload.status if payload.status is not None else user["status"]
+    bio = payload.bio if payload.bio is not None else user["bio"]
+    hourly_rate = payload.hourly_rate if payload.hourly_rate is not None else user["hourly_rate"]
+    
+    pct = payload.employment_percentage if payload.employment_percentage is not None else user["employment_percentage"]
+    target_hours = round((pct / 100.0) * 37.5, 2)
+    
+    if payload.password and payload.password.strip():
+        pwd_hash = hash_password(payload.password.strip())
+        cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pwd_hash, employee_id))
+        
+    cursor.execute("""
+    UPDATE users SET 
+        full_name = ?,
+        phone = ?,
+        handyman_specialty = ?,
+        employment_percentage = ?,
+        target_weekly_hours = ?,
+        hourly_rate = ?,
+        status = ?,
+        bio = ?
+    WHERE id = ?
+    """, (full_name, phone, specialty, pct, target_hours, hourly_rate, status_val, bio, employee_id))
+    
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": "Ansattprofilen er oppdatert!"}
+
+
+@app.get("/api/employees/{employee_id}/hours")
+async def get_employee_hours(employee_id: int):
+    """Returns work hour logs for an employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+    SELECT id, user_id, order_id, work_date, hours_spent, description, status, created_at
+    FROM work_hours_log
+    WHERE user_id = ?
+    ORDER BY work_date DESC, id DESC
+    """, (employee_id,))
+    rows = cursor.fetchall()
+    
+    logs = [dict(r) for r in rows]
+    total_hours = sum(l["hours_spent"] for l in logs)
+    
+    conn.close()
+    return {
+        "user_id": employee_id,
+        "total_logged_hours": round(total_hours, 1),
+        "logs": logs
+    }
+
+
+@app.post("/api/employees/{employee_id}/hours")
+async def log_employee_hours(employee_id: int, payload: HourLogCreate):
+    """Logs worked hours for a handyman."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    work_date = payload.work_date or datetime.now().strftime("%Y-%m-%d")
+    
+    cursor.execute("""
+    INSERT INTO work_hours_log (user_id, order_id, work_date, hours_spent, description, status, created_at)
+    VALUES (?, ?, ?, ?, ?, 'Godkjent', ?)
+    """, (employee_id, payload.order_id, work_date, payload.hours_spent, payload.description.strip(), now_str))
+    
+    log_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return {
+        "success": True,
+        "message": f"Ført {payload.hours_spent} timer for dato {work_date}!",
+        "log_id": log_id
+    }
+
+
+@app.get("/api/handyman/profile/{employee_id}")
+async def get_handyman_dashboard_profile(employee_id: int):
+    """Returns dedicated profile data, time statistics, and assigned orders for the logged in handyman."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM users WHERE id = ?", (employee_id,))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Håndverker ikke funnet.")
+        
+    pct = user["employment_percentage"] if user["employment_percentage"] is not None else 100
+    target_hours = round((pct / 100.0) * 37.5, 2)
+    
+    # Worked hours
+    cursor.execute("SELECT COALESCE(SUM(hours_spent), 0.0) FROM work_hours_log WHERE user_id = ?", (employee_id,))
+    worked_hours = float(cursor.fetchone()[0])
+    
+    # Hour logs list
+    cursor.execute("""
+    SELECT id, order_id, work_date, hours_spent, description, status, created_at
+    FROM work_hours_log
+    WHERE user_id = ?
+    ORDER BY work_date DESC, id DESC
+    LIMIT 20
+    """, (employee_id,))
+    hour_logs = [dict(r) for r in cursor.fetchall()]
+    
+    # Assigned upcoming/active orders
+    cursor.execute("""
+    SELECT * FROM orders
+    WHERE (assigned_handyman = ? OR assigned_handyman LIKE ?)
+    ORDER BY preferred_date ASC, id DESC
+    """, (user["full_name"], f"%{user['full_name']}%"))
+    orders_rows = cursor.fetchall()
+    orders_list = [dict(o) for o in orders_rows]
+    
+    active_orders = [o for o in orders_list if o["status"] not in ("Utført", "Fakturert", "Kansellert")]
+    completed_orders = [o for o in orders_list if o["status"] in ("Utført", "Fakturert")]
+    
+    balance = round(worked_hours - target_hours, 1)
+    
+    conn.close()
+    return {
+        "profile": {
+            "id": user["id"],
+            "full_name": user["full_name"],
+            "email": user["email"],
+            "phone": user["phone"],
+            "role": user["role"],
+            "handyman_specialty": user["handyman_specialty"],
+            "avatar_url": user["avatar_url"],
+            "employment_percentage": pct,
+            "target_weekly_hours": target_hours,
+            "hourly_rate": user["hourly_rate"],
+            "status": user["status"],
+            "bio": user["bio"]
+        },
+        "stats": {
+            "worked_hours": worked_hours,
+            "target_hours": target_hours,
+            "time_balance": balance,
+            "is_overtime": balance > 0,
+            "progress_pct": min(round((worked_hours / target_hours) * 100, 1) if target_hours > 0 else 0, 100),
+            "active_orders_count": len(active_orders),
+            "completed_orders_count": len(completed_orders)
+        },
+        "recent_hour_logs": hour_logs,
+        "assigned_orders": orders_list
+    }
+
+
+# --- Accounting & Financial Management Endpoints ---
+
+class ExpenseCreate(BaseModel):
+    title: str
+    category: str
+    vendor: str
+    amount_gross: float
+    vat_rate: Optional[float] = 25.0
+    expense_date: Optional[str] = None
+    receipt_url: Optional[str] = ""
+    notes: Optional[str] = ""
+    created_by: Optional[str] = "Admin"
+
+class EmploymentContractCreate(BaseModel):
+    user_id: int
+    employee_name: str
+    position_title: str
+    employment_percentage: int = 100
+    weekly_hours: Optional[float] = 37.5
+    hourly_rate: Optional[float] = 380.0
+    start_date: str
+    probation_period: Optional[str] = "6 måneder"
+    notice_period: Optional[str] = "1 måned (14 dager i prøvetid)"
+    workplace_address: Optional[str] = "Bergen og omegn (Kundelokasjoner)"
+    special_terms: Optional[str] = ""
+
+
+@app.get("/api/accounting/summary")
+async def get_accounting_summary(fiscal_year: Optional[int] = None):
+    """Calculates comprehensive P&L (Resultatregnskap), payroll with Fiscal Year totals, expenses, VAT balance, and profit margin."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    current_year = fiscal_year or datetime.now().year
+    
+    # 1. Total Revenue from Orders (Gross, Net, VAT 25%)
+    cursor.execute("""
+    SELECT 
+        COALESCE(SUM(total_price), 0.0) as total_gross,
+        COALESCE(SUM(CASE WHEN status IN ('Utført', 'Fakturert', 'Bekreftet', 'Pågår', 'På vei') THEN total_price ELSE 0.0 END), 0.0) as realized_gross,
+        COUNT(id) as total_orders_count,
+        SUM(CASE WHEN status IN ('Utført', 'Fakturert') THEN 1 ELSE 0 END) as completed_orders_count
+    FROM orders
+    """)
+    rev_row = cursor.fetchone()
+    revenue_gross = float(rev_row["realized_gross"])
+    # 25% VAT on service revenue
+    revenue_net = round(revenue_gross / 1.25, 2)
+    revenue_vat = round(revenue_gross - revenue_net, 2)
+    
+    # 2. Payroll Costs (Lønnskostnader) & Fiscal Year Total Calculations
+    cursor.execute("""
+    SELECT 
+        u.id as user_id,
+        u.full_name,
+        u.employment_percentage,
+        u.target_weekly_hours,
+        COALESCE(u.hourly_rate, 380.0) as hourly_rate,
+        COALESCE(SUM(w.hours_spent), 0.0) as total_hours_worked
+    FROM users u
+    LEFT JOIN work_hours_log w ON u.id = w.user_id
+    WHERE u.role = 'handyman'
+    GROUP BY u.id
+    ORDER BY u.full_name ASC
+    """)
+    handymen_payroll_rows = cursor.fetchall()
+    
+    payroll_list = []
+    total_wages_gross_ytd = 0.0
+    total_fiscal_annual_wages_gross = 0.0
+    total_fiscal_annual_cost = 0.0
+    
+    for h in handymen_payroll_rows:
+        hrs_worked = float(h["total_hours_worked"])
+        rate = float(h["hourly_rate"])
+        pct = float(h["employment_percentage"] or 100)
+        weekly_target = float(h["target_weekly_hours"] or round((pct / 100.0) * 37.5, 2))
+        
+        # Påløpt hittil (YTD / Period)
+        gross_wage_ytd = round(hrs_worked * rate, 2)
+        aga_tax_ytd = round(gross_wage_ytd * 0.141, 2) # 14.1% Arbeidsgiveravgift Sone 1
+        holiday_pay_ytd = round(gross_wage_ytd * 0.102, 2) # 10.2% Feriepenger
+        emp_total_cost_ytd = round(gross_wage_ytd + aga_tax_ytd + holiday_pay_ytd, 2)
+        
+        total_wages_gross_ytd += gross_wage_ytd
+        
+        # Helårsberegning for Fiscal År (52 uker normtid, 100% = 1950t/år)
+        annual_hours_norm = round(weekly_target * 52.0, 1)
+        annual_gross_wage = round(annual_hours_norm * rate, 2)
+        annual_aga = round(annual_gross_wage * 0.141, 2)
+        annual_holiday_pay = round(annual_gross_wage * 0.102, 2)
+        annual_otp = round(annual_gross_wage * 0.02, 2) # 2.0% OTP
+        annual_total_cost = round(annual_gross_wage + annual_aga + annual_holiday_pay + annual_otp, 2)
+        
+        total_fiscal_annual_wages_gross += annual_gross_wage
+        total_fiscal_annual_cost += annual_total_cost
+        
+        payroll_list.append({
+            "user_id": h["user_id"],
+            "full_name": h["full_name"],
+            "employment_percentage": int(pct),
+            "target_weekly_hours": weekly_target,
+            "annual_hours_norm": annual_hours_norm,
+            "hourly_rate": rate,
+            "hours_worked": hrs_worked,
+            "gross_wage": gross_wage_ytd,
+            "aga_tax": aga_tax_ytd,
+            "holiday_pay": holiday_pay_ytd,
+            "total_cost": emp_total_cost_ytd,
+            "fiscal_year_annual_gross": annual_gross_wage,
+            "fiscal_year_annual_aga": annual_aga,
+            "fiscal_year_annual_holiday": annual_holiday_pay,
+            "fiscal_year_annual_otp": annual_otp,
+            "fiscal_year_annual_total_cost": annual_total_cost
+        })
+        
+    total_aga_tax_ytd = round(total_wages_gross_ytd * 0.141, 2)
+    total_holiday_pay_ytd = round(total_wages_gross_ytd * 0.102, 2)
+    total_payroll_cost_ytd = round(total_wages_gross_ytd + total_aga_tax_ytd + total_holiday_pay_ytd, 2)
+    
+    total_fiscal_annual_aga = round(total_fiscal_annual_wages_gross * 0.141, 2)
+    total_fiscal_annual_holiday = round(total_fiscal_annual_wages_gross * 0.102, 2)
+    total_fiscal_annual_otp = round(total_fiscal_annual_wages_gross * 0.02, 2)
+    
+    # 3. Operating Expenses & Materials (Driftsutgifter)
+    cursor.execute("""
+    SELECT 
+        COALESCE(SUM(amount_gross), 0.0) as exp_gross,
+        COALESCE(SUM(amount_net), 0.0) as exp_net,
+        COALESCE(SUM(vat_amount), 0.0) as exp_vat,
+        COUNT(id) as exp_count
+    FROM expenses
+    """)
+    exp_row = cursor.fetchone()
+    expenses_gross = float(exp_row["exp_gross"])
+    expenses_net = float(exp_row["exp_net"])
+    expenses_vat = float(exp_row["exp_vat"])
+    
+    # Group expenses by category
+    cursor.execute("""
+    SELECT category, SUM(amount_gross) as cat_gross, SUM(amount_net) as cat_net, COUNT(id) as count
+    FROM expenses
+    GROUP BY category
+    ORDER BY cat_gross DESC
+    """)
+    expense_categories = [dict(r) for r in cursor.fetchall()]
+    
+    # Recent expense list
+    cursor.execute("""
+    SELECT id, title, category, vendor, amount_gross, vat_rate, amount_net, vat_amount, expense_date, receipt_url, notes, created_by
+    FROM expenses
+    ORDER BY expense_date DESC, id DESC
+    LIMIT 30
+    """)
+    recent_expenses = [dict(r) for r in cursor.fetchall()]
+    
+    # 4. Resultat / Fortjeneste & Marginer
+    # Driftsresultat = Netto Inntekt - Lønnskostnader (YTD) - Netto Driftsutgifter
+    net_operating_profit = round(revenue_net - total_payroll_cost_ytd - expenses_net, 2)
+    profit_margin_pct = round((net_operating_profit / revenue_net) * 100.0, 1) if revenue_net > 0 else 0.0
+    
+    # 5. MVA-oppgjør (VAT settlement to Tax Authority)
+    # Skyldig MVA = Utgående MVA på salg - Inngående MVA på kjøp/utgifter
+    vat_payable = round(revenue_vat - expenses_vat, 2)
+    
+    conn.close()
+    
+    return {
+        "fiscal_year": current_year,
+        "revenue": {
+            "gross": revenue_gross,
+            "net": revenue_net,
+            "vat_sales": revenue_vat,
+            "orders_count": rev_row["total_orders_count"],
+            "completed_count": rev_row["completed_orders_count"]
+        },
+        "payroll": {
+            "gross_wages": total_wages_gross_ytd,
+            "aga_tax": total_aga_tax_ytd,
+            "holiday_pay": total_holiday_pay_ytd,
+            "total_payroll_cost": total_payroll_cost_ytd,
+            "fiscal_year": {
+                "year": current_year,
+                "total_annual_cost": total_fiscal_annual_cost,
+                "annual_gross_wages": total_fiscal_annual_wages_gross,
+                "annual_aga_tax": total_fiscal_annual_aga,
+                "annual_holiday_pay": total_fiscal_annual_holiday,
+                "annual_otp": total_fiscal_annual_otp,
+                "active_employees_count": len(payroll_list)
+            },
+            "employees_breakdown": payroll_list
+        },
+        "expenses": {
+            "gross": expenses_gross,
+            "net": expenses_net,
+            "vat_deductible": expenses_vat,
+            "count": exp_row["exp_count"],
+            "categories": expense_categories,
+            "recent_list": recent_expenses
+        },
+        "profit": {
+            "net_profit": net_operating_profit,
+            "profit_margin_pct": profit_margin_pct,
+            "is_profitable": net_operating_profit >= 0
+        },
+        "vat_settlement": {
+            "sales_vat_outgoing": revenue_vat,
+            "purchase_vat_incoming": expenses_vat,
+            "net_vat_payable": vat_payable
+        }
+    }
+
+
+@app.get("/api/expenses")
+async def get_expenses(category: Optional[str] = None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = "SELECT * FROM expenses WHERE 1=1"
+    params = []
+    if category and category != "Alle":
+        query += " AND category = ?"
+        params.append(category)
+    query += " ORDER BY expense_date DESC, id DESC"
+    cursor.execute(query, params)
+    expenses = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return {"expenses": expenses, "count": len(expenses)}
+
+
+@app.post("/api/expenses", status_code=status.HTTP_201_CREATED)
+async def create_expense(exp: ExpenseCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    vat_rate = exp.vat_rate if exp.vat_rate is not None else 25.0
+    amount_net = round(exp.amount_gross / (1.0 + (vat_rate / 100.0)), 2)
+    vat_amount = round(exp.amount_gross - amount_net, 2)
+    exp_date = exp.expense_date or datetime.now().strftime("%Y-%m-%d")
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    cursor.execute("""
+    INSERT INTO expenses (
+        title, category, vendor, amount_gross, vat_rate, amount_net, vat_amount,
+        expense_date, receipt_url, notes, created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        exp.title.strip(),
+        exp.category.strip(),
+        exp.vendor.strip(),
+        exp.amount_gross,
+        vat_rate,
+        amount_net,
+        vat_amount,
+        exp_date,
+        exp.receipt_url or "",
+        exp.notes or "",
+        exp.created_by or "Admin",
+        now_str
+    ))
+    
+    expense_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return {
+        "success": True,
+        "message": f"Utgift '{exp.title}' på kr {exp.amount_gross},- er registrert i regnskapet!",
+        "expense_id": expense_id,
+        "amount_net": amount_net,
+        "vat_amount": vat_amount
+    }
+
+
+@app.delete("/api/expenses/{expense_id}")
+async def delete_expense(expense_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": "Utgift slettet fra regnskapet."}
+
+
+# --- Employment Contracts Endpoints ---
+
+@app.get("/api/contracts")
+async def get_all_contracts():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM employment_contracts ORDER BY id DESC")
+    contracts = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return {"contracts": contracts, "count": len(contracts)}
+
+
+@app.get("/api/contracts/user/{user_id}")
+async def get_user_contract(user_id: int):
+    """Returns stored contract or dynamically generates pre-filled standard contract based on employee profile."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check if existing contract exists
+    cursor.execute("SELECT * FROM employment_contracts WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,))
+    existing = cursor.fetchone()
+    
+    if existing:
+        conn.close()
+        return {"contract": dict(existing), "is_saved": True}
+        
+    # Generate pre-filled draft from user profile
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Ansatt ikke funnet.")
+        
+    pct = user["employment_percentage"] if user["employment_percentage"] is not None else 100
+    weekly_hours = round((pct / 100.0) * 37.5, 2) if pct > 0 else 0.0
+    hourly_rate = user["hourly_rate"] if user["hourly_rate"] is not None else 380.0
+    rand_id = random.randint(100, 999)
+    contract_number = f"CTR-2026-{rand_id}"
+    
+    if pct == 0:
+        position_title = f"{user['handyman_specialty'] or 'Håndverker'} (Tilkallingsvikar / Ekstrahjelp)"
+        special_terms = "Rammeavtale for tilkallingsvikar / ekstrahjelp etter behov jf. Arbeidsmiljøloven § 14-9. Arbeidstid tilbys og avtales særskilt for hvert enkelt oppdrag. Lønn utbetales etter avtalt timesats for faktisk arbeidede timer. Arbeidstaker står fritt til å akseptere eller avslå tilbudte oppdrag/vakter."
+        probation_period = "Ingen fast prøvetid (oppdragsbasert)"
+        notice_period = "14 dager"
+    else:
+        position_title = user["handyman_specialty"] or "Håndverker & Montør"
+        special_terms = f"Fast ansettelse med {pct}% stillingsprosent ({weekly_hours} timer per uke). Overtid godtgjøres med 40% tillegg etter AML § 10-6. Arbeidstaker stiller med nødvendig førerkort klasse B."
+        probation_period = "6 måneder"
+        notice_period = "1 måned (14 dager i prøvetiden)"
+
+    draft_contract = {
+        "user_id": user["id"],
+        "contract_number": contract_number,
+        "employee_name": user["full_name"],
+        "employee_email": user["email"],
+        "employee_phone": user["phone"] or "",
+        "employee_address": f"{user['street_address'] or 'Adresse'}, {user['postal_code'] or ''} {user['city'] or 'Bergen'}",
+        "position_title": position_title,
+        "employment_percentage": pct,
+        "weekly_hours": weekly_hours,
+        "hourly_rate": hourly_rate,
+        "start_date": datetime.now().strftime("%Y-%m-%d"),
+        "probation_period": probation_period,
+        "notice_period": notice_period,
+        "workplace_address": "Bergen og omegn (Kundelokasjoner / Servida AS)",
+        "special_terms": special_terms,
+        "employer_name": "Servida AS",
+        "employer_org_no": "932 847 192 MVA",
+        "employer_address": "Servida Hovedkontor, 5000 Bergen",
+        "status": "Forhåndsutfylt Utkast",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    return {"contract": draft_contract, "is_saved": False}
+
+
+@app.post("/api/contracts", status_code=status.HTTP_201_CREATED)
+async def create_or_save_contract(c: EmploymentContractCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rand_num = random.randint(100, 999)
+    contract_number = f"CTR-2026-{rand_num}"
+    weekly_hours = c.weekly_hours or round((c.employment_percentage / 100.0) * 37.5, 2)
+    
+    cursor.execute("""
+    INSERT INTO employment_contracts (
+        user_id, contract_number, employee_name, position_title, employment_percentage,
+        weekly_hours, hourly_rate, start_date, probation_period, notice_period,
+        workplace_address, special_terms, created_at, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Signert & Aktiv')
+    """, (
+        c.user_id,
+        contract_number,
+        c.employee_name.strip(),
+        c.position_title.strip(),
+        c.employment_percentage,
+        weekly_hours,
+        c.hourly_rate or 380.0,
+        c.start_date,
+        c.probation_period or "6 måneder",
+        c.notice_period or "1 måned (14 dager i prøvetid)",
+        c.workplace_address or "Bergen og omegn",
+        c.special_terms or "",
+        now_str
+    ))
+    
+    contract_id = cursor.lastrowid
+    
+    # Also synchronize user record if needed
+    cursor.execute("""
+    UPDATE users SET 
+        employment_percentage = ?,
+        target_weekly_hours = ?,
+        hourly_rate = ?
+    WHERE id = ?
+    """, (c.employment_percentage, weekly_hours, c.hourly_rate or 380.0, c.user_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return {
+        "success": True,
+        "message": f"Arbeidsavtale {contract_number} for {c.employee_name} er opprettet og aktivert!",
+        "contract_id": contract_id,
+        "contract_number": contract_number
+    }
+
 
 
