@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Servida — Håndverker- & Administrasjonsportal</title>
+  <meta name="description" content="Operativt kontrollpanel for Servida: Oppdragsoversikt, ruteplanlegging, håndverkertildeling og tjenestebehandler.">
+  
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
+</head>
+<body class="admin-body">
+
+  <!-- Left Sidebar Navigation -->
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <span>🛠️ Servida</span>
+      <span style="font-size: 0.7rem; background: #059669; padding: 0.2rem 0.5rem; border-radius: 9999px;">Portal</span>
+    </div>
+
+    <nav class="admin-nav" aria-label="Admin Navigasjon">
+      <button class="admin-nav-item active" data-view="orders">
+        <span>📋</span> Oppdrag & Ordrer
+        <span class="admin-badge-count" id="badge-new-orders">0</span>
+      </button>
+
+      <button class="admin-nav-item" data-view="calendar">
+        <span>📅</span> Dagsplan & Kalender
+      </button>
+
+      <button class="admin-nav-item" data-view="services">
+        <span>🏷️</span> Tjenester & Priser
+      </button>
+
+      <button class="admin-nav-item" data-view="stats">
+        <span>📊</span> Nøkkeltall & Analyse
+      </button>
+    </nav>
+
+    <div class="admin-bottom-actions">
+      <a href="/" class="admin-nav-item" style="color: #94A3B8;">
+        <span>🌐</span> Tilbake til butikken
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="admin-main">
+    
+    <!-- Top Bar -->
+    <header class="admin-header">
+      <h1 class="admin-page-title" id="admin-view-title">Oppdrag & Ordrer</h1>
+
+      <div class="admin-header-right">
+        <input type="text" id="admin-search" class="admin-search-input" placeholder="Søk i kunde, tlf, ordrenr...">
+        <button id="btn-refresh-admin" style="height: 40px; padding: 0 1rem; border-radius: 8px; border: 1px solid var(--admin-border); background: white; font-weight: 600; cursor: pointer;">
+          🔄 Oppdater
+        </button>
+      </div>
+    </header>
+
+    <main class="admin-container">
+      
+      <!-- Top KPI Summary Cards -->
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-title">Nye Bestillinger</span>
+          <div class="kpi-val" id="kpi-new-count" style="color: #EF4444;">0</div>
+          <span class="kpi-sub" style="color: #EF4444;">Venter på tildeling</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-title">Aktive Oppdrag</span>
+          <div class="kpi-val" id="kpi-active-count" style="color: #3B82F6;">0</div>
+          <span class="kpi-sub" style="color: #3B82F6;">Bekreftet / På vei</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-title">Fullført & Fakturert</span>
+          <div class="kpi-val" id="kpi-done-count" style="color: #10B981;">0</div>
+          <span class="kpi-sub">Håndverkeroppdrag utført</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-title">Total Ordrereserve</span>
+          <div class="kpi-val" id="kpi-revenue">kr 0,-</div>
+          <span class="kpi-sub">0,- kr app-gebyrer</span>
+        </div>
+      </section>
+
+      <!-- VIEW 1: Orders Pipeline View -->
+      <section id="view-orders">
+        
+        <!-- Filter Tabs -->
+        <div class="filter-tabs-row">
+          <button class="filter-tab-btn active" data-status="Alle">Alle oppdrag</button>
+          <button class="filter-tab-btn" data-status="Ny bestilling">🚨 Nye bestillinger</button>
+          <button class="filter-tab-btn" data-status="Bekreftet">📅 Bekreftet</button>
+          <button class="filter-tab-btn" data-status="Håndverker tildelt">👷 Håndverker tildelt</button>
+          <button class="filter-tab-btn" data-status="På vei">🚗 På vei</button>
+          <button class="filter-tab-btn" data-status="Utført">✅ Utført</button>
+        </div>
+
+        <!-- View Switcher (Kanban vs Table) -->
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem; gap: 0.5rem;">
+          <button id="btn-show-kanban" style="padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid var(--admin-border); background: #0F172A; color: white; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+            📊 Kanban-tavle
+          </button>
+          <button id="btn-show-table" style="padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid var(--admin-border); background: white; color: #475569; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+            📑 Tabellvisning
+          </button>
+        </div>
+
+        <!-- Kanban Board -->
+        <div class="kanban-board" id="kanban-board-container">
+          
+          <div class="kanban-col" data-col="Ny bestilling">
+            <div class="kanban-col-header">
+              <strong>🚨 Nye bestillinger</strong>
+              <span class="status-badge badge-ny" id="col-count-ny">0</span>
+            </div>
+            <div class="kanban-cards-list" id="col-list-ny"></div>
+          </div>
+
+          <div class="kanban-col" data-col="Bekreftet">
+            <div class="kanban-col-header">
+              <strong>📅 Bekreftet</strong>
+              <span class="status-badge badge-bekreftet" id="col-count-bekreftet">0</span>
+            </div>
+            <div class="kanban-cards-list" id="col-list-bekreftet"></div>
+          </div>
+
+          <div class="kanban-col" data-col="Håndverker tildelt">
+            <div class="kanban-col-header">
+              <strong>👷 Håndverker tildelt</strong>
+              <span class="status-badge badge-tildelt" id="col-count-tildelt">0</span>
+            </div>
+            <div class="kanban-cards-list" id="col-list-tildelt"></div>
+          </div>
+
+          <div class="kanban-col" data-col="Utført">
+            <div class="kanban-col-header">
+              <strong>✅ Utført / Fakturert</strong>
+              <span class="status-badge badge-utført" id="col-count-utført">0</span>
+            </div>
+            <div class="kanban-cards-list" id="col-list-utført"></div>
+          </div>
+
+        </div>
+
+        <!-- Table View (Hidden by default) -->
+        <div class="admin-table-card" id="table-view-container" style="display: none;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Ordrenr</th>
+                <th>Kunde & Telefon</th>
+                <th>Adresse</th>
+                <th>Tjeneste & Omfang</th>
+                <th>Tidspunkt</th>
+                <th>Pris</th>
+                <th>Tildelt Håndverker</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="orders-table-tbody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
+      <!-- VIEW 2: Calendar & Routing View (Hidden initially) -->
+      <section id="view-calendar" style="display: none;">
+        <div class="admin-table-card" style="padding: 1.5rem;">
+          <h3 style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.2rem; font-weight: 800; margin-bottom: 1rem;">
+            📅 Håndverker Dagsplan & Ruteoversikt
+          </h3>
+          <div id="calendar-day-groups">
+            <!-- Rendered by admin.js -->
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: Services & Prices CMS (Hidden initially) -->
+      <section id="view-services" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <p style="color: #64748B; font-size: 0.95rem;">
+            Endre fastpriser, vilkår og garantier i sanntid. Ingen Shopify-apper eller eksterne avgifter.
+          </p>
+          <span style="font-weight: 700; color: #059669;" id="services-count-admin">125 aktive tjenester</span>
+        </div>
+
+        <div class="service-cms-grid" id="services-cms-grid">
+          <!-- Rendered by admin.js -->
+        </div>
+      </section>
+
+      <!-- VIEW 4: Statistics (Hidden initially) -->
+      <section id="view-stats" style="display: none;">
+        <div class="admin-table-card" style="padding: 2rem;">
+          <h3 style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.25rem; font-weight: 800; margin-bottom: 1rem;">
+            📈 Plattformsstatistikk & Nøkkeltall
+          </h3>
+          <div id="detailed-stats-content">
+            <!-- Rendered by admin.js -->
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Order Detail & Handyman Drawer -->
+  <div class="drawer-overlay" id="order-drawer" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="drawer-panel">
+      <button class="drawer-close-btn" id="drawer-close-btn">✕</button>
+      
+      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem;">
+        <span class="status-badge badge-ny" id="drawer-status-badge">Ny bestilling</span>
+        <span style="font-family: monospace; font-weight: 700; color: #64748B;" id="drawer-order-id">SRV-00000000-0000</span>
+      </div>
+
+      <h2 class="drawer-title" id="drawer-service-title">Tjenestetittel</h2>
+      <p style="font-size: 0.9rem; color: #059669; font-weight: 700; margin-bottom: 1rem;" id="drawer-total-price">kr 0,-</p>
+
+      <!-- Kundedetaljer -->
+      <div class="detail-section">
+        <h4>👤 Kunde & Lokasjon</h4>
+        <div class="detail-row">
+          <span>Navn:</span>
+          <strong id="drawer-customer-name">Kundenavn</strong>
+        </div>
+        <div class="detail-row">
+          <span>Telefon:</span>
+          <strong><a href="#" id="drawer-customer-phone" style="color: #059669; font-weight: 700;">📞 000 00 000</a></strong>
+        </div>
+        <div class="detail-row">
+          <span>E-post:</span>
+          <strong id="drawer-customer-email">kunde@epost.no</strong>
+        </div>
+        <div class="detail-row">
+          <span>Adresse:</span>
+          <strong><a href="#" id="drawer-address-map" target="_blank" style="color: #3B82F6;">📍 Gateadresse, Postnr</a></strong>
+        </div>
+        <div class="detail-row">
+          <span>Avtalt tidspunkt:</span>
+          <strong id="drawer-datetime" style="color: #0F172A;">Dato (08:00 - 12:00)</strong>
+        </div>
+      </div>
+
+      <!-- Oppdragsspesifikasjoner -->
+      <div class="detail-section">
+        <h4>🛠️ Valgt Variant & Tillegg</h4>
+        <div class="detail-row">
+          <span>Hovedvariant:</span>
+          <strong id="drawer-variant">Standard</strong>
+        </div>
+        <div id="drawer-addons-wrap" style="margin-top: 0.5rem;">
+          <!-- Addons listed here -->
+        </div>
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; font-size: 0.85rem;">
+          <strong>Kundens notat:</strong>
+          <p id="drawer-notes" style="color: #475569; margin-top: 0.25rem; font-style: italic;">Ingen kommentar.</p>
+        </div>
+      </div>
+
+      <!-- Håndverkertildeling & Statusendring -->
+      <div class="detail-section">
+        <h4>⚙️ Håndverker & Oppdragsstatus</h4>
+        
+        <div style="margin-bottom: 1rem;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">
+            Tilordne håndverker:
+          </label>
+          <select id="drawer-assignee-select" style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-weight: 600;">
+            <option value="Ikke tildelt">Ikke tildelt</option>
+            <option value="Lars (Snekker / Tømrer)">Lars (Snekker / Tømrer)</option>
+            <option value="Magnus (Mekaniker / Bilpleie)">Magnus (Mekaniker / Bilpleie)</option>
+            <option value="Erik (Montør / Handyman)">Erik (Montør / Handyman)</option>
+            <option value="Håkon (Rørlegger / VVS)">Håkon (Rørlegger / VVS)</option>
+            <option value="Per (Maler)">Per (Maler)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">
+            Endre oppdragsstatus:
+          </label>
+          <select id="drawer-status-select" style="width: 100%; height: 42px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-weight: 700;">
+            <option value="Ny bestilling">🚨 Ny bestilling</option>
+            <option value="Bekreftet">📅 Bekreftet</option>
+            <option value="Håndverker tildelt">👷 Håndverker tildelt</option>
+            <option value="På vei">🚗 På vei</option>
+            <option value="Utført">✅ Utført</option>
+            <option value="Fakturert">💳 Fakturert / Betalt</option>
+            <option value="Kansellert">❌ Kansellert</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">
+            Interne håndverkernotater:
+          </label>
+          <textarea id="drawer-handyman-notes" style="width: 100%; height: 70px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0.5rem; font-size: 0.88rem;" placeholder="F.eks. Nøkkel i boks, slagdrill nødvendig, husk 8mm bor..."></textarea>
+        </div>
+
+        <button id="btn-save-order-updates" style="width: 100%; height: 44px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.95rem;">
+          💾 Lagre endringer
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>
