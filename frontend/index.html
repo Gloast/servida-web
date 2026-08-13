@@ -33,7 +33,11 @@
       <nav class="nav-actions" aria-label="Hovednavigasjon">
         <a href="#how-it-works" class="nav-link">Slik fungerer det</a>
         <a href="#catalog-section" class="nav-link">Tjenester</a>
-        <a href="tel:40000000" class="nav-phone">📞 40 00 00 00</a>
+        <button class="nav-link-btn" id="btn-track-order-nav" title="Spor din bestilling">🔍 Spor ordre</button>
+        <button class="nav-account-btn" id="btn-account-nav">
+          <span class="account-icon">👤</span>
+          <span id="nav-user-label">Min Side / Logg inn</span>
+        </button>
         <a href="/admin" class="admin-link-btn" title="Gå til Håndverker- & Adminpanel">⚙️ Håndverkerportal</a>
       </nav>
     </div>
@@ -396,6 +400,376 @@
       <div>Utviklet som en skreddersydd, uavhengig tjenesteplattform uten månedlige app-gebyrer.</div>
     </div>
   </footer>
+
+  <!-- AUTH MODAL (Login & Register for Customers) -->
+  <div class="modal-backdrop" id="auth-modal" style="display: none;">
+    <div class="modal-card auth-modal-card">
+      <div class="modal-header-clean">
+        <div class="auth-tabs-row">
+          <button class="auth-tab active" id="tab-login-btn">Logg inn</button>
+          <button class="auth-tab" id="tab-register-btn">Ny bruker</button>
+        </div>
+        <button class="modal-close-icon" id="btn-close-auth">✕</button>
+      </div>
+
+      <!-- Login Form -->
+      <div class="auth-tab-content" id="auth-login-pane">
+        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem;">Velkommen tilbake!</h3>
+        <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
+          Logg inn for å se dine aktive oppdrag, kjøpshistorikk og lagrede adresser.
+        </p>
+
+        <form id="form-login" onsubmit="return false;">
+          <div class="form-group-custom">
+            <label>E-postadresse</label>
+            <input type="email" id="login-email" placeholder="din.epost@example.no" required>
+          </div>
+          <div class="form-group-custom">
+            <label>Passord</label>
+            <input type="password" id="login-password" placeholder="••••••••" required>
+          </div>
+
+          <div id="login-error-msg" class="auth-error-box" style="display: none;"></div>
+
+          <button class="btn-primary" id="btn-submit-login" style="width: 100%; margin-top: 0.5rem; height: 48px;">
+            Logg inn på Min Side
+          </button>
+        </form>
+
+        <div class="demo-accounts-box">
+          <span style="font-size: 0.78rem; font-weight: 600; color: var(--color-text-muted); display: block; margin-bottom: 0.5rem;">
+            ⚡ Rask testinnlogging (klikk for å fylle ut):
+          </span>
+          <div class="demo-acc-chips">
+            <button class="demo-chip-btn" id="chip-demo-ole">👤 Ole Hansen (Kunde)</button>
+            <button class="demo-chip-btn" id="chip-demo-kari">👤 Kari Nordmann (Kunde)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Register Form -->
+      <div class="auth-tab-content" id="auth-register-pane" style="display: none;">
+        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem;">Opprett kundeprofil</h3>
+        <p style="color: var(--color-text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
+          Få full oversikt over alle dine håndverkertjenester og lagre adresse for raskere bestillinger.
+        </p>
+
+        <form id="form-register" onsubmit="return false;">
+          <div class="form-group-custom">
+            <label>Fullt navn</label>
+            <input type="text" id="reg-name" placeholder="F.eks. Kari Nordmann" required>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group-custom">
+              <label>E-postadresse</label>
+              <input type="email" id="reg-email" placeholder="kari@example.no" required>
+            </div>
+            <div class="form-group-custom">
+              <label>Mobilnummer</label>
+              <input type="tel" id="reg-phone" placeholder="912 34 567" required>
+            </div>
+          </div>
+          <div class="form-group-custom">
+            <label>Gateadresse</label>
+            <input type="text" id="reg-address" placeholder="F.eks. Strandgaten 12" required>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group-custom">
+              <label>Postnummer</label>
+              <input type="text" id="reg-postcode" placeholder="5004" maxlength="4" required>
+            </div>
+            <div class="form-group-custom">
+              <label>Poststed</label>
+              <input type="text" id="reg-city" placeholder="Bergen" required>
+            </div>
+          </div>
+          <div class="form-group-custom">
+            <label>Passord</label>
+            <input type="password" id="reg-password" placeholder="Minst 6 tegn" minlength="6" required>
+          </div>
+
+          <div id="reg-error-msg" class="auth-error-box" style="display: none;"></div>
+
+          <button class="btn-primary" id="btn-submit-register" style="width: 100%; margin-top: 0.5rem; height: 48px;">
+            Opprett konto & Logg inn
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MIN SIDE MODAL (Customer Dashboard & Order History) -->
+  <div class="modal-backdrop" id="minside-modal" style="display: none;">
+    <div class="modal-card minside-modal-card">
+      <div class="minside-header">
+        <div class="minside-user-info">
+          <div class="user-avatar-circle" id="minside-avatar">👤</div>
+          <div>
+            <h2 id="minside-user-name" style="font-size: 1.35rem; font-weight: 700; margin: 0;">Ole Christian Hansen</h2>
+            <span id="minside-user-email" style="color: var(--color-text-muted); font-size: 0.88rem;">ole.hansen@example.no</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <button class="btn-outline-sm" id="btn-logout">Logg ut</button>
+          <button class="modal-close-icon" id="btn-close-minside">✕</button>
+        </div>
+      </div>
+
+      <!-- Min Side Navigation Tabs -->
+      <div class="minside-nav-tabs">
+        <button class="minside-tab active" data-tab="orders">
+          📋 Mine Bestillinger & Kjøpshistorikk
+          <span class="minside-badge" id="minside-orders-count">0</span>
+        </button>
+        <button class="minside-tab" data-tab="profile">
+          👤 Min Profil & Standardadresse
+        </button>
+      </div>
+
+      <!-- Tab Content: Orders & Purchase History -->
+      <div class="minside-tab-pane" id="pane-minside-orders">
+        <div class="minside-orders-toolbar">
+          <div style="font-weight: 600; font-size: 1rem;">Oversikt over dine oppdrag:</div>
+          <button class="btn-primary-sm" id="btn-new-booking-from-portal">+ Ny bestilling</button>
+        </div>
+
+        <div id="minside-orders-list" class="orders-cards-stack">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Tab Content: Profile Settings -->
+      <div class="minside-tab-pane" id="pane-minside-profile" style="display: none;">
+        <form id="form-update-profile" onsubmit="return false;" class="profile-form-grid">
+          <div class="form-group-custom">
+            <label>Fullt navn</label>
+            <input type="text" id="prof-name" required>
+          </div>
+          <div class="form-group-custom">
+            <label>E-postadresse (innlogging)</label>
+            <input type="email" id="prof-email" disabled style="background: #F1F5F9; cursor: not-allowed;">
+          </div>
+          <div class="form-group-custom">
+            <label>Mobilnummer</label>
+            <input type="tel" id="prof-phone" required>
+          </div>
+          <div class="form-group-custom">
+            <label>Standard gateadresse</label>
+            <input type="text" id="prof-address" required>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group-custom">
+              <label>Postnummer</label>
+              <input type="text" id="prof-postcode" maxlength="4" required>
+            </div>
+            <div class="form-group-custom">
+              <label>Poststed</label>
+              <input type="text" id="prof-city" required>
+            </div>
+          </div>
+          <div class="form-group-custom" style="border-top: 1px solid var(--color-border); padding-top: 1rem; margin-top: 0.5rem;">
+            <label>Nytt passord (valgfritt)</label>
+            <input type="password" id="prof-new-password" placeholder="La stå tomt for å beholde nåværende">
+          </div>
+
+          <div id="profile-success-msg" class="auth-success-box" style="display: none;"></div>
+
+          <button class="btn-primary" id="btn-save-profile" style="height: 48px; margin-top: 0.5rem;">
+            Lagre profilendringer
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ORDER DETAILS & LIVE TRACKING MODAL -->
+  <div class="modal-backdrop" id="order-detail-modal" style="display: none;">
+    <div class="modal-card order-detail-modal-card">
+      <div class="modal-header-clean" style="border-bottom: 1px solid var(--color-border); padding-bottom: 1rem;">
+        <div>
+          <span class="tracking-badge-header" id="track-status-pill">Bekreftet</span>
+          <h2 id="track-service-title" style="font-size: 1.35rem; font-weight: 700; margin: 0.25rem 0 0;">Montere TV på vegg</h2>
+          <span style="font-size: 0.85rem; color: var(--color-text-muted);" id="track-order-num">Ordrenr: SRV-20260814-1042</span>
+        </div>
+        <button class="modal-close-icon" id="btn-close-tracking">✕</button>
+      </div>
+
+      <div class="tracking-modal-body">
+        
+        <!-- Live Visual Timeline -->
+        <div class="timeline-container">
+          <h4 style="font-size: 0.92rem; font-weight: 700; margin-bottom: 1rem; color: var(--color-text-main);">
+            📍 Live Oppdragsstatus & Fremdrift:
+          </h4>
+          <div class="progress-track-steps" id="track-progress-steps">
+            <!-- Dynamically generated step dots and connectors -->
+          </div>
+        </div>
+
+        <!-- Handyman Assigned Card -->
+        <div class="assigned-handyman-card" id="track-handyman-card">
+          <div class="handyman-avatar">👷</div>
+          <div class="handyman-info">
+            <span style="font-size: 0.78rem; text-transform: uppercase; font-weight: 700; color: var(--color-accent); letter-spacing: 0.5px;">Tildelt fagperson</span>
+            <strong id="track-handyman-name" style="font-size: 1.05rem; display: block;">Lars Snekker</strong>
+            <span id="track-handyman-status-note" style="font-size: 0.85rem; color: var(--color-text-muted);">
+              Murvegg, slagdrill og 8mm betongbor klargjort.
+            </span>
+          </div>
+        </div>
+
+        <!-- Order Information Grid -->
+        <div class="order-info-summary-grid">
+          <div class="info-cell">
+            <span class="cell-label">📅 Avtalt tidspunkt</span>
+            <strong id="track-datetime">15. august 2026 (08:00 - 12:00)</strong>
+          </div>
+          <div class="info-cell">
+            <span class="cell-label">📍 Oppmøteadresse</span>
+            <strong id="track-address">Fjellveien 14, 5014 Bergen</strong>
+          </div>
+          <div class="info-cell">
+            <span class="cell-label">🏷️ Valgt variant / tilvalg</span>
+            <strong id="track-variant">Størrelse: 55-100"</strong>
+          </div>
+          <div class="info-cell">
+            <span class="cell-label">💰 Fastpris inkl. mva</span>
+            <strong id="track-total-price" style="color: var(--color-accent); font-size: 1.1rem;">kr 1 847,-</strong>
+            <span style="font-size: 0.75rem; color: var(--color-text-muted); display: block;" id="track-payment-badge">Betales etter godkjenning</span>
+          </div>
+        </div>
+
+        <!-- Customer & Handyman Chat / Messages -->
+        <div class="order-chat-section">
+          <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem;">
+            💬 Beskjeder & Kommunikasjon til håndverker
+          </h4>
+          <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">
+            Gi beskjed om parkering, ringeklokke eller andre praktiske detaljer:
+          </p>
+
+          <div class="chat-messages-container" id="track-chat-messages">
+            <!-- Messages rendered here -->
+          </div>
+
+          <div class="chat-input-row">
+            <input type="text" id="chat-new-message-input" placeholder="Skriv en beskjed til håndverkeren..." autocomplete="off">
+            <button class="btn-primary-sm" id="btn-send-chat-msg">Send beskjed</button>
+          </div>
+        </div>
+
+        <!-- Review & Rating Section (if completed) -->
+        <div class="order-review-section" id="track-review-box" style="display: none;">
+          <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.25rem;">⭐ Vurder oppdraget</h4>
+          <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">
+            Hvordan var utførelsen av håndverkertjenesten?
+          </p>
+          <div class="star-rating-row" id="star-rating-picker">
+            <span class="star-pick" data-val="1">★</span>
+            <span class="star-pick" data-val="2">★</span>
+            <span class="star-pick" data-val="3">★</span>
+            <span class="star-pick" data-val="4">★</span>
+            <span class="star-pick" data-val="5">★</span>
+          </div>
+          <textarea id="review-comment-input" placeholder="Skriv en kort tilbakemelding til håndverkeren..." rows="2" style="width: 100%; border-radius: 8px; border: 1px solid var(--color-border); padding: 0.5rem; font-size: 0.85rem; margin-top: 0.5rem;"></textarea>
+          <button class="btn-primary-sm" id="btn-submit-review" style="margin-top: 0.5rem;">Send vurdering</button>
+        </div>
+
+        <!-- Actions -->
+        <div class="track-actions-row">
+          <button class="btn-secondary-sm" id="btn-print-receipt">🖨️ Skriv ut / Lagre PDF-kvittering</button>
+          <button class="btn-danger-outline-sm" id="btn-cancel-order-track">Avbestill oppdrag</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- QUICK TRACK MODAL (for direct order search without login) -->
+  <div class="modal-backdrop" id="quick-track-modal" style="display: none;">
+    <div class="modal-card auth-modal-card">
+      <div class="modal-header-clean">
+        <h3 style="font-size: 1.25rem; font-weight: 700;">🔍 Spor din bestilling</h3>
+        <button class="modal-close-icon" id="btn-close-quick-track">✕</button>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 1.25rem;">
+        Tast inn ditt referansenummer (f.eks. <code>SRV-20260814-1042</code>) for å se live status for oppdraget ditt.
+      </p>
+
+      <div class="form-group-custom">
+        <label>Ordrenummer</label>
+        <input type="text" id="quick-track-input" placeholder="SRV-20260814-XXXX" style="font-family: monospace; font-size: 1.05rem; letter-spacing: 1px;">
+      </div>
+
+      <div id="quick-track-error" class="auth-error-box" style="display: none;"></div>
+
+      <button class="btn-primary" id="btn-submit-quick-track" style="width: 100%; height: 48px; margin-top: 0.5rem;">
+        Finn oppdrag →
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       GEMINI AI CHATBOT WIDGET (CUSTOMER ASSISTANT)
+       ========================================================================== -->
+  <div class="ai-chatbot-container" id="ai-chatbot-container">
+    <!-- Floating Trigger Button -->
+    <button class="ai-fab-btn" id="ai-fab-btn" title="Spør Servida AI">
+      <span class="ai-fab-icon">✨</span>
+      <span class="ai-fab-label">Spør Servida AI</span>
+      <span class="ai-online-pulse"></span>
+    </button>
+
+    <!-- Chatbot Window -->
+    <div class="ai-chat-window" id="ai-chat-window" style="display: none;">
+      <!-- Header -->
+      <div class="ai-chat-header">
+        <div class="ai-chat-brand">
+          <div class="ai-avatar-circle">✨</div>
+          <div>
+            <h4 class="ai-brand-title">Servida AI-assistent</h4>
+            <span class="ai-brand-status">🟢 Pålogget • Drevet av Gemini</span>
+          </div>
+        </div>
+        <button class="ai-chat-close-btn" id="btn-close-ai-chat" title="Lukk">✕</button>
+      </div>
+
+      <!-- Quick Chips Bar -->
+      <div class="ai-chips-bar" id="ai-chips-bar">
+        <button class="ai-chip" data-query="Hva koster det å bytte et servantbatteri?">🚿 Bytte blandebatteri</button>
+        <button class="ai-chip" data-query="Hvilke tjenester har dere for montering av IKEA møbler og skap?">🛋️ IKEA-montering</button>
+        <button class="ai-chip" data-query="Hva inngår i Servidas fastprisgaranti?">🛡️ Fastprisgaranti</button>
+        <button class="ai-chip" data-query="Kan dere hjelpe med maling og sparkling av vegg?">🎨 Maling & sparkling</button>
+      </div>
+
+      <!-- Message History Container -->
+      <div class="ai-messages-feed" id="ai-messages-feed">
+        <!-- Initial Assistant Message -->
+        <div class="ai-msg ai-msg-bot">
+          <div class="ai-bubble">
+            Hei! 👋 Jeg er Servidas AI-rådgiver. Hva slags håndverkerhjelp eller oppussingsprosjekt trenger du i dag? Spør meg om priser, hva som inngår, eller få hjelp til å velge riktig fastpris!
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="ai-chat-input-area">
+        <input type="text" id="ai-user-input" placeholder="Still et spørsmål om oppdrag, priser..." autocomplete="off">
+        <button class="ai-send-btn" id="btn-ai-send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/js/app.js"></script>
 </body>

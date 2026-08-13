@@ -500,9 +500,11 @@ document.querySelectorAll(".admin-nav-item[data-view]").forEach(btn => {
     document.getElementById("view-orders").style.display = currentView === "orders" ? "block" : "none";
     document.getElementById("view-calendar").style.display = currentView === "calendar" ? "block" : "none";
     document.getElementById("view-services").style.display = currentView === "services" ? "block" : "none";
+    document.getElementById("view-docs").style.display = currentView === "docs" ? "block" : "none";
     document.getElementById("view-stats").style.display = currentView === "stats" ? "block" : "none";
     
     if (currentView === "services") loadServicesCMS();
+    if (currentView === "docs") loadPdfDocs();
   });
 });
 
@@ -938,5 +940,135 @@ if (btnSaveAiKey) {
     }
   });
 }
+
+// ==========================================================================
+// 11. PDF DOCUMENTATION & HANDYMAN MANUALS CONTROLLER
+// ==========================================================================
+
+const docsGridContainer = document.getElementById("docs-grid-container");
+const docsCountBadge = document.getElementById("docs-count-badge");
+const docsSearchInput = document.getElementById("docs-search-input");
+const docsCategoryFilter = document.getElementById("docs-category-filter");
+const docsTypeFilter = document.getElementById("docs-type-filter");
+
+const pdfViewerModal = document.getElementById("pdf-viewer-modal");
+const pdfViewerTitle = document.getElementById("pdf-viewer-title");
+const pdfViewerSubtitle = document.getElementById("pdf-viewer-subtitle");
+const pdfDirectDownloadBtn = document.getElementById("pdf-direct-download-btn");
+const pdfIframeElement = document.getElementById("pdf-iframe-element");
+const btnClosePdfViewer = document.getElementById("btn-close-pdf-viewer");
+
+let allPdfDocs = [];
+
+async function loadPdfDocs() {
+  if (!docsGridContainer) return;
+  docsGridContainer.innerHTML = "<p style='color: #64748B; padding: 2rem;'>Laster inn PDF-dokumenter...</p>";
+
+  const search = docsSearchInput ? docsSearchInput.value.trim() : "";
+  const category = docsCategoryFilter ? docsCategoryFilter.value : "alle";
+  const docType = docsTypeFilter ? docsTypeFilter.value : "alle";
+
+  const params = new URLSearchParams();
+  if (search) params.append("search", search);
+  if (category && category !== "alle") params.append("category", category);
+  if (docType && docType !== "alle") params.append("doc_type", docType);
+
+  try {
+    const res = await fetch(`/api/docs/list?${params.toString()}`);
+    const data = await res.json();
+    allPdfDocs = data.docs || [];
+
+    if (docsCountBadge) {
+      docsCountBadge.textContent = `${allPdfDocs.length} dokumenter`;
+    }
+
+    if (allPdfDocs.length === 0) {
+      docsGridContainer.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; background: #F8FAFC; border: 1px dashed var(--admin-border); border-radius: 12px;">
+          <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">🔍</span>
+          <h4 style="font-weight: 700; color: #0F172A; margin-bottom: 0.25rem;">Ingen dokumenter funnet</h4>
+          <p style="font-size: 0.85rem; color: #64748B;">Prøv å endre søkeord eller tilbakestill kategorifilteret.</p>
+        </div>
+      `;
+      return;
+    }
+
+    docsGridContainer.innerHTML = allPdfDocs.map(doc => {
+      const isSop = doc.doc_type === "SOP / Sjekkliste";
+      const badgeClass = isSop ? "badge-sop" : "badge-product-info";
+      const badgeIcon = isSop ? "🛠️" : "📄";
+
+      return `
+        <div class="doc-pdf-card">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <span class="${badgeClass}">${badgeIcon} ${doc.doc_type}</span>
+              <span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">${doc.size_kb} KB</span>
+            </div>
+
+            <h4 style="font-size: 0.98rem; font-weight: 700; color: #0F172A; margin: 0 0 0.35rem; line-height: 1.35;">
+              ${doc.title}
+            </h4>
+
+            <div style="font-size: 0.78rem; color: #64748B; margin-bottom: 0.85rem;">
+              <strong>Kategori:</strong> ${doc.category}
+              ${doc.service_folder ? `<br><strong>Tjeneste:</strong> ${doc.service_folder}` : ''}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; border-top: 1px solid var(--admin-border); padding-top: 0.75rem;">
+            <button class="btn-doc-action" onclick="openPdfViewerModal('${doc.url}', '${escapeHtml(doc.title)}', '${escapeHtml(doc.category)}')" style="background: #0F172A; color: white; border: none;">
+              👁️ Åpne / Les
+            </button>
+            <a class="btn-doc-action" href="${doc.url}" target="_blank" download style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border);">
+              ⬇️ Last ned
+            </a>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (err) {
+    docsGridContainer.innerHTML = `<p style="color: #DC2626;">Feil ved innlasting av dokumenter: ${err.message}</p>`;
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function openPdfViewerModal(url, title, category) {
+  if (!pdfViewerModal) return;
+  pdfViewerTitle.textContent = title;
+  pdfViewerSubtitle.textContent = `Kategori: ${category} • Servida Håndbok`;
+  pdfDirectDownloadBtn.href = url;
+  pdfIframeElement.src = url;
+  pdfViewerModal.style.display = "flex";
+}
+
+function closePdfViewerModal() {
+  if (!pdfViewerModal) return;
+  pdfIframeElement.src = "";
+  pdfViewerModal.style.display = "none";
+}
+
+if (btnClosePdfViewer) btnClosePdfViewer.addEventListener("click", closePdfViewerModal);
+if (pdfViewerModal) {
+  pdfViewerModal.addEventListener("click", (e) => {
+    if (e.target === pdfViewerModal) closePdfViewerModal();
+  });
+}
+
+// Search and filter event listeners for docs
+if (docsSearchInput) {
+  docsSearchInput.addEventListener("input", () => loadPdfDocs());
+}
+if (docsCategoryFilter) {
+  docsCategoryFilter.addEventListener("change", () => loadPdfDocs());
+}
+if (docsTypeFilter) {
+  docsTypeFilter.addEventListener("change", () => loadPdfDocs());
+}
+
 
 

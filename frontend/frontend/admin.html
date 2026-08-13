@@ -32,6 +32,11 @@
         <span>🏷️</span> Tjenester & Priser
       </button>
 
+      <button class="admin-nav-item" data-view="docs">
+        <span>📚</span> Håndbøker & SOP (PDF)
+        <span class="admin-badge-count" style="background: #3B82F6;">250</span>
+      </button>
+
       <button class="admin-nav-item" data-view="stats">
         <span>📊</span> Nøkkeltall & Analyse
       </button>
@@ -238,6 +243,60 @@
           <div id="detailed-stats-content">
             <!-- Rendered by admin.js -->
           </div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: PDF Documentation & Handyman Manuals Archive (Hidden initially) -->
+      <section id="view-docs" style="display: none;">
+        <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                📚 Servida Håndbøker, Sjekklister & Dokumenter (PDF)
+              </h3>
+              <p style="color: #64748B; font-size: 0.88rem; margin: 0;">
+                Fullt arkiv med 250 offisielle prosedyrehåndbøker (SOP) og produktark for håndverkere og admin. Tilgjengelig for direkte forhåndsvisning og nedlasting.
+              </p>
+            </div>
+            <span style="font-weight: 800; font-size: 1rem; color: #3B82F6; background: #EFF6FF; padding: 0.4rem 0.85rem; border-radius: 9999px; border: 1px solid #BFDBFE;" id="docs-count-badge">
+              250 dokumenter
+            </span>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+            <input type="text" id="docs-search-input" placeholder="🔍 Søk i tittel, tjeneste, sjekkliste..." style="height: 44px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.85rem; font-size: 0.9rem;">
+            
+            <select id="docs-category-filter" style="height: 44px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+              <option value="alle">Alle 13 kategorier</option>
+              <option value="Dører, Vinduer & Lås">🚪 Dører, Vinduer & Lås</option>
+              <option value="Kjøkken, Bad & VVS">🚿 Kjøkken, Bad & VVS</option>
+              <option value="Montering, Møbler & Interiør">🛠️ Montering & Interiør</option>
+              <option value="Garasje & Solskjerming">🏠 Garasje & Solskjerming</option>
+              <option value="Gulv & Trapp">🪵 Gulv & Trapp</option>
+              <option value="Maling & Vegg">🎨 Maling & Vegg</option>
+              <option value="Hage, Utemiljø & Snømåking">🌿 Hage & Snø</option>
+              <option value="Høytrykksvask & Rengjøring">💧 Høytrykksvask</option>
+              <option value="Maskinservice & Robotklipper">🤖 Maskinservice</option>
+              <option value="Bil & Kjøretøy">🚗 Bil & Kjøretøy</option>
+              <option value="Ventilasjon & Inneklima">💨 Ventilasjon</option>
+              <option value="Handyman & Rådgivning">⏱️ Handyman</option>
+              <option value="Tilvalg & Tilleggspakker">➕ Tilvalg</option>
+            </select>
+
+            <select id="docs-type-filter" style="height: 44px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
+              <option value="alle">Alle dokumenttyper</option>
+              <option value="SOP / Sjekkliste">🛠️ Framgangsmåte & Sjekklister (SOP)</option>
+              <option value="Produktinformasjon">📄 Produktark</option>
+            </select>
+          </div>
+
+          <!-- Document Grid Container -->
+          <div class="docs-grid-container" id="docs-grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem;">
+            <!-- Rendered by admin.js -->
+          </div>
+
         </div>
       </section>
 
@@ -607,6 +666,35 @@
         <button id="btn-save-ai-key" style="width: 100%; height: 44px; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
           💾 Lagre API-nøkkel
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-BROWSER PDF VIEWER MODAL -->
+  <div class="drawer-overlay" id="pdf-viewer-modal" style="display: none; align-items: center; justify-content: center; z-index: 10000; padding: 1.5rem;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 960px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
+      
+      <!-- Viewer Header -->
+      <div style="padding: 1rem 1.5rem; background: #0F172A; color: white; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 0.6rem; overflow: hidden;">
+          <span style="font-size: 1.4rem;">📄</span>
+          <div style="overflow: hidden;">
+            <h4 id="pdf-viewer-title" style="margin: 0; font-size: 1rem; font-weight: 700; color: white; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">Dokument</h4>
+            <span id="pdf-viewer-subtitle" style="font-size: 0.75rem; color: #94A3B8;">Servida PDF Arkiv</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <a id="pdf-direct-download-btn" href="#" target="_blank" download class="btn-primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; background: #3B82F6; color: white; text-decoration: none; border-radius: 6px; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
+            ⬇️ Last ned PDF
+          </a>
+          <button id="btn-close-pdf-viewer" style="background: rgba(255,255,255,0.15); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem;">✕</button>
+        </div>
+      </div>
+
+      <!-- Iframe Content -->
+      <div style="flex: 1; background: #525659; position: relative;">
+        <iframe id="pdf-iframe-element" src="" style="width: 100%; height: 100%; border: none;"></iframe>
       </div>
     </div>
   </div>

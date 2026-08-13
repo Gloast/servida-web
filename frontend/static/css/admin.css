@@ -486,6 +486,162 @@ body.admin-body {
   justify-content: space-between;
 }
 
+/* Role Badges & Profile Pill */
+.role-badge {
+  display: inline-block;
+  background: #E2E8F0;
+  color: #0F172A;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid var(--admin-border);
+}
+
+.admin-profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: white;
+  border: 1px solid var(--admin-border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+}
+
+.admin-avatar-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #0F172A;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.btn-action-status {
+  padding: 0.4rem 0.85rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+
+.btn-action-status:hover {
+  opacity: 0.9;
+}
+
+/* Admin Auth Overlay */
+.admin-auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.admin-auth-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 440px;
+  padding: 2.25rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.profile-quick-btn {
+  background: #F8FAFC;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 150ms;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-quick-btn:hover {
+  background: #EFF6FF;
+  border-color: #3B82F6;
+}
+
+.profile-quick-btn strong {
+  font-size: 0.85rem;
+  color: #0F172A;
+}
+
+.profile-quick-btn span {
+  font-size: 0.72rem;
+  color: #64748B;
+}
+
+/* PDF Documentation Card Styles */
+.doc-pdf-card {
+  background: #FFFFFF;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 150ms;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.doc-pdf-card:hover {
+  border-color: #3B82F6;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
+  transform: translateY(-2px);
+}
+
+.badge-sop {
+  background: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.badge-product-info {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-doc-action {
+  height: 36px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  text-decoration: none;
+  transition: all 150ms;
+}
+
 @media (max-width: 1024px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .kanban-board { grid-template-columns: 1fr 1fr; }
@@ -497,3 +653,4 @@ body.admin-body {
   .kpi-grid { grid-template-columns: 1fr; }
   .kanban-board { grid-template-columns: 1fr; }
 }
+

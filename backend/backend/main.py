@@ -997,3 +997,91 @@ async def update_ai_config(payload: AIConfigUpdate):
     save_gemini_api_key(payload.gemini_api_key.strip())
     return {"success": True, "message": "Gemini API-nøkkel er lagret!"}
 
+
+# ==========================================================================
+# PDF DOCUMENTATION ARCHIVE & HANDYMAN MANUALS (SOP)
+# ==========================================================================
+
+DOCS_DIR = os.path.join(STATIC_DIR, "docs")
+
+@app.get("/api/docs/list")
+async def list_pdf_docs(
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    doc_type: Optional[str] = None
+):
+    """Returns indexed list of all 250 PDF manuals, checklists, and product sheets."""
+    import urllib.parse
+    if not os.path.exists(DOCS_DIR):
+        return {"total": 0, "categories": {}, "docs": []}
+
+    categories: Dict[str, int] = {}
+    docs: List[Dict[str, Any]] = []
+    
+    def normalize_norwegian(s: str) -> str:
+        s = s.lower()
+        replacements = [('æ', 'ae'), ('ø', 'o'), ('å', 'a'), ('é', 'e'), ('è', 'e'), ('ä', 'a'), ('ö', 'o')]
+        for r1, r2 in replacements:
+            s = s.replace(r1, r2)
+        return s
+
+    search_term = normalize_norwegian(search.strip()) if search else ""
+    cat_filter = normalize_norwegian(category.strip()) if category and category != "alle" else ""
+    type_filter = normalize_norwegian(doc_type.strip()) if doc_type and doc_type != "alle" else ""
+
+    for root, dirs, files in os.walk(DOCS_DIR):
+        for f in files:
+            if f.lower().endswith(".pdf"):
+                rel_path = os.path.relpath(os.path.join(root, f), DOCS_DIR)
+                parts = rel_path.split(os.sep)
+                cat_folder = parts[0] if len(parts) > 1 else "Generelt"
+                service_folder = parts[1] if len(parts) > 2 else ""
+                
+                cat_clean = cat_folder.split(" - ")[-1] if " - " in cat_folder else cat_folder
+                is_sop = "framgangsm" in f.lower() or "sjekkliste" in f.lower()
+                dtype = "SOP / Sjekkliste" if is_sop else "Produktinformasjon"
+                
+                # Normalize values for filtering
+                norm_cat = normalize_norwegian(cat_clean)
+                norm_dtype = normalize_norwegian(dtype)
+                norm_filename = normalize_norwegian(f)
+                norm_srv = normalize_norwegian(service_folder)
+                
+                # Filters
+                if cat_filter and cat_filter not in norm_cat:
+                    continue
+                if type_filter and type_filter not in norm_dtype:
+                    continue
+                if search_term and (search_term not in norm_filename and search_term not in norm_srv and search_term not in norm_cat):
+                    continue
+                
+                url = "/static/docs/" + urllib.parse.quote(rel_path.replace(os.sep, "/"))
+                try:
+                    size_kb = round(os.path.getsize(os.path.join(root, f)) / 1024, 1)
+                except Exception:
+                    size_kb = 0.0
+                
+                doc_item = {
+                    "filename": f,
+                    "title": f.replace(".pdf", ""),
+                    "service_folder": service_folder,
+                    "category": cat_clean,
+                    "doc_type": dtype,
+                    "url": url,
+                    "size_kb": size_kb
+                }
+                
+                docs.append(doc_item)
+                if cat_clean not in categories:
+                    categories[cat_clean] = 0
+                categories[cat_clean] += 1
+
+    docs.sort(key=lambda x: (x["category"], x["service_folder"], x["title"]))
+
+    return {
+        "total": len(docs),
+        "categories": categories,
+        "docs": docs
+    }
+
+
