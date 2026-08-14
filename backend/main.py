@@ -4,8 +4,8 @@ import json
 import sqlite3
 import random
 import urllib.parse
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -458,6 +458,361 @@ async def get_service(handle: str):
     }
 
 
+# ==========================================================================
+# DYNAMIC CAPACITY, TRAVEL TIME & SCHEDULING ENGINE (08:00 - 16:00)
+# ==========================================================================
+
+WORK_DAY_START_HOUR = 8.0   # 08:00
+WORK_DAY_END_HOUR = 16.0    # 16:00
+WORK_DAY_TOTAL_HOURS = 8.0  # 8 hours per handyman per day
+DEFAULT_TRAVEL_BUFFER_HOURS = 0.5  # 30 minutes driving buffer between jobs
+
+def format_hour_to_time_str(h: float) -> str:
+    hours = int(h)
+    minutes = int(round((h - hours) * 60))
+    return f"{hours:02d}:{minutes:02d}"
+
+def parse_service_duration_hours(raw_hours: Any, service_title: str = "") -> float:
+    """Extracts duration in hours. E.g. '1 time' -> 1.0, '1–2 timer' -> 1.5, '2–3 timer' -> 2.5."""
+    if raw_hours:
+        try:
+            h_str = str(raw_hours).lower().replace("timer", "").replace("time", "").replace("t", "").strip()
+            if "–" in h_str or "-" in h_str:
+                parts = h_str.replace("–", "-").split("-")
+                return (float(parts[0].strip()) + float(parts[1].strip())) / 2.0
+            val = float(h_str.replace(",", "."))
+            if val > 0:
+                return val
+        except:
+            pass
+            
+    # Intelligent heuristics based on service title
+    t_low = (service_title or "").lower()
+    if any(k in t_low for k in ["lås", "dørvrider", "speil", "knagg", "røykvarsler", "gardinstang", "silikon", "lampe", "bryter", "stikkontakt"]):
+        return 1.0
+    elif any(k in t_low for k in ["tv", "ytterdør", "innerdør", "doorman", "ventilator", "oppvaskmaskin", "kran", "blandebatteri"]):
+        return 2.0
+    elif any(k in t_low for k in ["garderobe", "skap", "pax", "kjøkkenmontering", "benkeplate", "parkett"]):
+        return 3.0
+    return 1.5
+
+def generate_dynamic_slots_for_service(work_hours: float) -> List[Dict[str, Any]]:
+    """
+    Generates dynamic candidate time slots within 08:00 - 16:00 tailored precisely to the
+    service's estimated duration plus a 30-minute travel/rigging buffer.
+    Slots never exceed the required duration window (e.g. 1h job = 1.5h interval).
+    """
+    slots = []
+    
+    if work_hours <= 1.0:
+        # 1.5h intervals (1.0h work + 30m travel): 08:00-09:30, 09:30-11:00, 11:00-12:30, 12:30-14:00, 14:00-15:30
+        starts = [8.0, 9.5, 11.0, 12.5, 14.0]
+        for s in starts:
+            e = s + 1.5
+            s_str = format_hour_to_time_str(s)
+            e_str = format_hour_to_time_str(e)
+            slots.append({
+                "slot_id": f"{s_str} - {e_str}",
+                "title": f"⏱️ {s_str} – {e_str}",
+                "time_range": f"{s_str} – {e_str}",
+                "start_hour": s,
+                "end_hour": e,
+                "duration_hours": 1.5,
+                "work_hours": work_hours,
+                "interval_label": "1.5t (1t oppdrag + 30 min kjøretid)"
+            })
+    elif work_hours <= 1.5:
+        # 2.0h intervals (1.5h work + 30m travel): 08:00-10:00, 10:00-12:00, 12:00-14:00, 14:00-16:00
+        starts = [8.0, 10.0, 12.0, 14.0]
+        for s in starts:
+            e = s + 2.0
+            s_str = format_hour_to_time_str(s)
+            e_str = format_hour_to_time_str(e)
+            slots.append({
+                "slot_id": f"{s_str} - {e_str}",
+                "title": f"⏱️ {s_str} – {e_str}",
+                "time_range": f"{s_str} – {e_str}",
+                "start_hour": s,
+                "end_hour": e,
+                "duration_hours": 2.0,
+                "work_hours": work_hours,
+                "interval_label": "2.0t (1.5t oppdrag + 30 min kjøretid)"
+            })
+    elif work_hours <= 2.5:
+        # 2.5h intervals (2.0h work + 30m travel): 08:00-10:30, 10:30-13:00, 13:30-16:00
+        starts = [8.0, 10.5, 13.5]
+        for s in starts:
+            e = s + 2.5
+            s_str = format_hour_to_time_str(s)
+            e_str = format_hour_to_time_str(e)
+            slots.append({
+                "slot_id": f"{s_str} - {e_str}",
+                "title": f"⏱️ {s_str} – {e_str}",
+                "time_range": f"{s_str} – {e_str}",
+                "start_hour": s,
+                "end_hour": e,
+                "duration_hours": 2.5,
+                "work_hours": work_hours,
+                "interval_label": f"{work_hours}t oppdrag + 30 min kjøretid"
+            })
+    elif work_hours <= 3.5:
+        # 3.5h intervals (3.0h work + 30m travel): 08:00-11:30, 12:30-16:00
+        starts = [(8.0, 11.5), (12.5, 16.0)]
+        for s, e in starts:
+            s_str = format_hour_to_time_str(s)
+            e_str = format_hour_to_time_str(e)
+            slots.append({
+                "slot_id": f"{s_str} - {e_str}",
+                "title": f"⏱️ {s_str} – {e_str}",
+                "time_range": f"{s_str} – {e_str}",
+                "start_hour": s,
+                "end_hour": e,
+                "duration_hours": 3.5,
+                "work_hours": work_hours,
+                "interval_label": f"{work_hours}t oppdrag + 30 min kjøretid"
+            })
+    else:
+        # 4.0h+ intervals (Halvdag formiddag/ettermiddag)
+        starts = [(8.0, 12.5), (11.5, 16.0)]
+        for s, e in starts:
+            s_str = format_hour_to_time_str(s)
+            e_str = format_hour_to_time_str(e)
+            slots.append({
+                "slot_id": f"{s_str} - {e_str}",
+                "title": f"⏱️ {s_str} – {e_str}",
+                "time_range": f"{s_str} – {e_str}",
+                "start_hour": s,
+                "end_hour": e,
+                "duration_hours": (e - s),
+                "work_hours": work_hours,
+                "interval_label": f"{work_hours}t oppdrag + 30 min kjøretid"
+            })
+            
+    # Add Flexible option within 08:00 - 16:00
+    slots.append({
+        "slot_id": "Fleksibel (08:00 - 16:00)",
+        "title": "🕒 Fleksibel dagtid (08:00 – 16:00)",
+        "time_range": "08:00 – 16:00",
+        "start_hour": 8.0,
+        "end_hour": 16.0,
+        "duration_hours": work_hours + 0.5,
+        "work_hours": work_hours,
+        "interval_label": "Håndverker ringer 30 min før ankomst"
+    })
+    
+    return slots
+
+def parse_time_slot_hours(slot_str: str) -> Tuple[float, float]:
+    """Extracts start and end hours as floats from time slot string, defaulting to 08:00 - 16:00."""
+    if not slot_str or "fleksibel" in slot_str.lower():
+        return (8.0, 16.0)
+    try:
+        parts = slot_str.replace("–", "-").split("-")
+        s_part = parts[0].strip()
+        e_part = parts[1].strip() if len(parts) > 1 else ""
+        
+        s_h, s_m = map(int, s_part.split(":")[:2])
+        start = s_h + (s_m / 60.0)
+        
+        if e_part and ":" in e_part:
+            e_h, e_m = map(int, e_part.split(":")[:2])
+            end = e_h + (e_m / 60.0)
+        else:
+            end = min(start + 2.0, 16.0)
+            
+        return (start, end)
+    except:
+        return (8.0, 16.0)
+
+@app.get("/api/booking/availability")
+async def get_booking_availability(
+    date: str,
+    service_handle: Optional[str] = None,
+    postal_code: Optional[str] = None
+):
+    """
+    Evaluates real-time availability for booking time slots on a given date.
+    Considers existing orders, service duration, 30m travel buffer, and 08:00-16:00 work day limits.
+    Candidate slots are dynamically adapted to the service's duration (e.g. 1h job = 1.5h interval).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 1. Fetch active handymen
+    cursor.execute("SELECT id, full_name, role, status FROM users WHERE role = 'handyman' AND (status = 'Aktiv' OR status IS NULL)")
+    handymen = [dict(r) for r in cursor.fetchall()]
+    total_handymen = max(len(handymen), 1)
+    
+    # 2. Fetch service duration
+    est_service_hours = 1.5
+    service_title = ""
+    if service_handle:
+        cursor.execute("SELECT title, estimated_hours FROM services WHERE handle = ?", (service_handle,))
+        s_row = cursor.fetchone()
+        if s_row:
+            service_title = s_row["title"]
+            est_service_hours = parse_service_duration_hours(s_row["estimated_hours"], s_row["title"])
+
+    # 3. Fetch existing orders on this date
+    cursor.execute("""
+    SELECT id, order_number, customer_name, preferred_date, time_slot, assigned_handyman, street_address, postal_code, city
+    FROM orders
+    WHERE preferred_date = ? AND status != 'Kansellert'
+    """, (date,))
+    existing_orders = [dict(r) for r in cursor.fetchall()]
+    
+    # Group booked intervals per handyman (and unassigned)
+    handyman_intervals = {h["full_name"]: [] for h in handymen}
+    unassigned_intervals = []
+    
+    total_booked_hours_with_travel = 0.0
+    
+    for ord_item in existing_orders:
+        s_hr, e_hr = parse_time_slot_hours(ord_item["time_slot"])
+        s_buffered = max(WORK_DAY_START_HOUR, s_hr - DEFAULT_TRAVEL_BUFFER_HOURS / 2.0)
+        e_buffered = min(WORK_DAY_END_HOUR, e_hr + DEFAULT_TRAVEL_BUFFER_HOURS)
+        duration = max(e_buffered - s_buffered, 1.0)
+        
+        total_booked_hours_with_travel += duration
+        
+        h_assigned = ord_item["assigned_handyman"]
+        if h_assigned in handyman_intervals:
+            handyman_intervals[h_assigned].append((s_buffered, e_buffered))
+        else:
+            unassigned_intervals.append((s_buffered, e_buffered))
+            
+    # Calculate total daily team capacity
+    total_capacity_hours = total_handymen * WORK_DAY_TOTAL_HOURS
+    remaining_hours = max(0.0, total_capacity_hours - total_booked_hours_with_travel)
+    is_day_fully_booked = (remaining_hours < est_service_hours)
+    
+    # 4. Generate dynamic slots tailored to this service's duration
+    candidate_slots = generate_dynamic_slots_for_service(est_service_hours)
+    evaluated_slots = []
+    
+    for slot_def in candidate_slots:
+        req_start = slot_def["start_hour"]
+        req_end = slot_def["end_hour"]
+        
+        available_handymen_count = 0
+        
+        if not is_day_fully_booked:
+            for h in handymen:
+                h_name = h["full_name"]
+                intervals = handyman_intervals.get(h_name, [])
+                
+                # Check collision with existing jobs + travel buffer
+                has_collision = False
+                for (b_start, b_end) in intervals:
+                    if max(req_start, b_start) < min(req_end, b_end):
+                        has_collision = True
+                        break
+                        
+                if not has_collision:
+                    available_handymen_count += 1
+                    
+            # Deduct unassigned jobs from availability pool
+            available_handymen_count = max(0, available_handymen_count - len(unassigned_intervals))
+        
+        is_slot_available = (available_handymen_count > 0) and not is_day_fully_booked
+        
+        if is_slot_available:
+            if available_handymen_count >= 2:
+                status_badge = "🟢 Ledig"
+                reason_text = f"{available_handymen_count} ledige håndverkere (inkl. 30 min kjøretid)"
+            else:
+                status_badge = "🟡 1 ledig plass"
+                reason_text = "Begrenset kapasitet – bør reserveres raskt"
+        else:
+            status_badge = "🔒 Fullbooket"
+            reason_text = "Ingen ledige håndverkere i dette tidsrommet pga. andre oppdrag og kjøretid."
+            
+        evaluated_slots.append({
+            "slot_id": slot_def["slot_id"],
+            "title": slot_def["title"],
+            "time_range": slot_def["time_range"],
+            "available": is_slot_available,
+            "status_badge": status_badge,
+            "reason": reason_text,
+            "available_handymen_count": available_handymen_count,
+            "interval_label": slot_def.get("interval_label", ""),
+            "duration_hours": slot_def["duration_hours"],
+            "work_hours": slot_def.get("work_hours", est_service_hours),
+            "travel_buffer_minutes": 30
+        })
+        
+    conn.close()
+    
+    return {
+        "date": date,
+        "service_handle": service_handle,
+        "service_title": service_title,
+        "estimated_service_hours": est_service_hours,
+        "slot_interval_hours": est_service_hours + 0.5,
+        "work_day_hours": "08:00 – 16:00",
+        "travel_buffer_minutes": 30,
+        "total_handymen_count": total_handymen,
+        "total_capacity_hours": total_capacity_hours,
+        "booked_hours_including_travel": round(total_booked_hours_with_travel, 1),
+        "remaining_capacity_hours": round(remaining_hours, 1),
+        "is_fully_booked": is_day_fully_booked,
+        "slots": evaluated_slots
+    }
+
+
+@app.get("/api/booking/available-dates")
+async def get_available_dates(days_ahead: int = 14, service_handle: Optional[str] = None):
+    """Returns quick availability summary for the next X days."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'handyman' AND (status = 'Aktiv' OR status IS NULL)")
+    total_handymen = max(cursor.fetchone()[0], 1)
+    
+    now = datetime.now()
+    dates_list = []
+    
+    weekday_names_no = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"]
+    
+    for i in range(1, days_ahead + 1):
+        target = now + timedelta(days=i)
+        d_str = target.strftime("%Y-%m-%d")
+        w_idx = target.weekday()
+        day_name = weekday_names_no[w_idx]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE preferred_date = ? AND status != 'Kansellert'", (d_str,))
+        jobs_count = cursor.fetchone()[0]
+        
+        # Max capacity approx 3 jobs per handyman per day (08:00 - 16:00)
+        max_jobs = total_handymen * 3
+        remaining_slots = max(0, max_jobs - jobs_count)
+        is_full = (remaining_slots == 0)
+        
+        if is_full:
+            badge = "🔴 Fullbooket (8-16 opptatt)"
+            badge_type = "full"
+        elif remaining_slots <= 1:
+            badge = "🟡 Få plasser igjen"
+            badge_type = "low"
+        else:
+            badge = f"🟢 Ledig ({remaining_slots} plasser)"
+            badge_type = "open"
+            
+        dates_list.append({
+            "date": d_str,
+            "display_label": f"{day_name} {target.day}. {target.strftime('%b')}",
+            "day_name": day_name,
+            "jobs_count": jobs_count,
+            "remaining_slots": remaining_slots,
+            "is_full": is_full,
+            "badge": badge,
+            "badge_type": badge_type
+        })
+        
+    conn.close()
+    return {"dates": dates_list}
+
+
 # --- Booking & Order Management Endpoints ---
 
 @app.post("/api/bookings", status_code=status.HTTP_201_CREATED)
@@ -600,6 +955,172 @@ async def get_orders(status: Optional[str] = None, search: Optional[str] = None,
         
     conn.close()
     return {"orders": orders, "count": len(orders)}
+
+
+@app.get("/api/calendar/month")
+async def get_calendar_month(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    handyman: Optional[str] = None,
+    status: Optional[str] = None
+):
+    """Returns full month grid (all days, weekday padding, jobs per day, workload, revenue) for month-view calendar."""
+    import calendar
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    now = datetime.now()
+    target_year = year or now.year
+    target_month = month or now.month
+    
+    month_names_no = [
+        "", "Januar", "Februar", "Mars", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Desember"
+    ]
+    month_name = f"{month_names_no[target_month]} {target_year}"
+    
+    # First day weekday (0=Mon, 6=Sun) and number of days
+    first_weekday, num_days = calendar.monthrange(target_year, target_month)
+    
+    # Query all orders in this month
+    month_prefix = f"{target_year:04d}-{target_month:02d}-%"
+    
+    query = """
+    SELECT id, order_number, user_id, customer_name, customer_email, customer_phone,
+           street_address, postal_code, city, preferred_date, time_slot,
+           service_handle, service_title, variant_name, total_price,
+           status, payment_status, assigned_handyman, handyman_notes
+    FROM orders
+    WHERE preferred_date LIKE ? AND status != 'Kansellert'
+    """
+    params = [month_prefix]
+    
+    if handyman and handyman != "alle":
+        query += " AND (assigned_handyman = ? OR assigned_handyman LIKE ?)"
+        params.extend([handyman, f"%{handyman}%"])
+        
+    if status and status != "alle":
+        query += " AND status = ?"
+        params.append(status)
+        
+    query += " ORDER BY preferred_date ASC, time_slot ASC, id ASC"
+    cursor.execute(query, params)
+    order_rows = cursor.fetchall()
+    
+    orders_by_date = {}
+    total_month_revenue = 0.0
+    total_month_jobs = len(order_rows)
+    total_unassigned = 0
+    
+    for r in order_rows:
+        d_str = r["preferred_date"]
+        if d_str not in orders_by_date:
+            orders_by_date[d_str] = []
+            
+        is_unassigned = (r["assigned_handyman"] in ("Ikke tildelt", "", None))
+        if is_unassigned:
+            total_unassigned += 1
+            
+        total_month_revenue += float(r["total_price"] or 0.0)
+        
+        orders_by_date[d_str].append({
+            "id": r["id"],
+            "order_number": r["order_number"],
+            "service_title": r["service_title"],
+            "variant_name": r["variant_name"] or "Standard",
+            "customer_name": r["customer_name"],
+            "customer_phone": r["customer_phone"],
+            "street_address": r["street_address"],
+            "city": r["city"],
+            "time_slot": r["time_slot"],
+            "total_price": r["total_price"],
+            "status": r["status"],
+            "payment_status": r["payment_status"],
+            "assigned_handyman": r["assigned_handyman"] or "Ikke tildelt",
+            "is_unassigned": is_unassigned
+        })
+        
+    today_str = now.strftime("%Y-%m-%d")
+    days_grid = []
+    
+    # Preceding empty / padding days from previous month
+    prev_year = target_year if target_month > 1 else target_year - 1
+    prev_month = target_month - 1 if target_month > 1 else 12
+    _, prev_num_days = calendar.monthrange(prev_year, prev_month)
+    
+    for pad_idx in range(first_weekday):
+        pad_day_num = prev_num_days - first_weekday + pad_idx + 1
+        pad_date_str = f"{prev_year:04d}-{prev_month:02d}-{pad_day_num:02d}"
+        days_grid.append({
+            "day_number": pad_day_num,
+            "date": pad_date_str,
+            "is_current_month": False,
+            "is_today": False,
+            "is_weekend": (pad_idx >= 5),
+            "jobs_count": 0,
+            "jobs": []
+        })
+        
+    weekday_names_no = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"]
+    
+    for day_num in range(1, num_days + 1):
+        date_str = f"{target_year:04d}-{target_month:02d}-{day_num:02d}"
+        day_weekday = calendar.weekday(target_year, target_month, day_num)
+        day_jobs = orders_by_date.get(date_str, [])
+        
+        handymen_counts = {}
+        day_revenue = 0.0
+        for j in day_jobs:
+            day_revenue += float(j["total_price"] or 0.0)
+            h_name = j["assigned_handyman"]
+            if h_name not in ("Ikke tildelt", "", None):
+                handymen_counts[h_name] = handymen_counts.get(h_name, 0) + 1
+                
+        handymen_on_duty = [{"name": name, "count": cnt} for name, cnt in handymen_counts.items()]
+        
+        days_grid.append({
+            "day_number": day_num,
+            "day_name": weekday_names_no[day_weekday],
+            "date": date_str,
+            "is_current_month": True,
+            "is_today": (date_str == today_str),
+            "is_weekend": (day_weekday >= 5),
+            "jobs_count": len(day_jobs),
+            "total_revenue": round(day_revenue, 2),
+            "unassigned_count": sum(1 for j in day_jobs if j["is_unassigned"]),
+            "handymen_on_duty": handymen_on_duty,
+            "jobs": day_jobs
+        })
+        
+    # Trailing padding days
+    total_cells = len(days_grid)
+    remaining_cells = (7 - (total_cells % 7)) % 7
+    next_year = target_year if target_month < 12 else target_year + 1
+    next_month = target_month + 1 if target_month < 12 else 1
+    
+    for next_day_num in range(1, remaining_cells + 1):
+        next_date_str = f"{next_year:04d}-{next_month:02d}-{next_day_num:02d}"
+        days_grid.append({
+            "day_number": next_day_num,
+            "date": next_date_str,
+            "is_current_month": False,
+            "is_today": False,
+            "is_weekend": ((total_cells + next_day_num - 1) % 7 >= 5),
+            "jobs_count": 0,
+            "jobs": []
+        })
+        
+    conn.close()
+    
+    return {
+        "year": target_year,
+        "month": target_month,
+        "month_name": month_name,
+        "total_month_jobs": total_month_jobs,
+        "total_month_revenue": round(total_month_revenue, 2),
+        "total_unassigned_jobs": total_unassigned,
+        "days_grid": days_grid
+    }
 
 
 @app.get("/api/calendar/dispatch")
@@ -2329,6 +2850,525 @@ async def toggle_star_email(email_id: int):
     val = cursor.fetchone()[0]
     conn.close()
     return {"success": True, "is_starred": bool(val)}
+
+
+# ==========================================================================
+# 16. INVOICE SYSTEM & PAYMENT TRACKING CONTROLLER (FAKTURASENTER)
+# ==========================================================================
+
+class InvoiceLineItem(BaseModel):
+    description: str
+    quantity: float = 1.0
+    unit_price: float
+    vat_rate: float = 25.0
+    amount: float
+
+class InvoiceCreate(BaseModel):
+    order_id: Optional[int] = None
+    customer_name: str
+    customer_email: str
+    customer_phone: Optional[str] = ""
+    customer_address: Optional[str] = ""
+    customer_org_nr: Optional[str] = ""
+    invoice_date: Optional[str] = None
+    due_date: Optional[str] = None
+    payment_method: Optional[str] = "Faktura (Konto/KID)"
+    kid_number: Optional[str] = None
+    account_number: Optional[str] = "3624.12.98765"
+    line_items: List[Dict[str, Any]]
+    notes: Optional[str] = ""
+
+class InvoiceStatusUpdate(BaseModel):
+    status: str # 'Utestående', 'Betalt', 'Forfalt', 'Purring sendt', 'Kreditert'
+
+
+@app.get("/api/invoices")
+async def get_invoices(status: Optional[str] = "Alle", search: Optional[str] = None):
+    """Lists invoices with financial overview KPI stats."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Stats calculation
+    cursor.execute("SELECT id, status, total_gross, due_date FROM invoices")
+    all_invs = cursor.fetchall()
+    
+    total_unpaid = sum(r["total_gross"] for r in all_invs if r["status"] in ("Utestående", "Purring sendt", "Forfalt"))
+    unpaid_count = sum(1 for r in all_invs if r["status"] in ("Utestående", "Purring sendt", "Forfalt"))
+    
+    total_paid = sum(r["total_gross"] for r in all_invs if r["status"] == "Betalt")
+    paid_count = sum(1 for r in all_invs if r["status"] == "Betalt")
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    total_overdue = sum(r["total_gross"] for r in all_invs if r["status"] == "Forfalt" or (r["status"] == "Utestående" and r["due_date"] < today_str))
+    overdue_count = sum(1 for r in all_invs if r["status"] == "Forfalt" or (r["status"] == "Utestående" and r["due_date"] < today_str))
+
+    # Query filtered list
+    query = "SELECT * FROM invoices"
+    params = []
+    conditions = []
+
+    if status and status != "Alle":
+        if status == "Forfalt":
+            conditions.append("(status = 'Forfalt' OR (status = 'Utestående' AND due_date < ?))")
+            params.append(today_str)
+        else:
+            conditions.append("status = ?")
+            params.append(status)
+
+    if search:
+        s = f"%{search.strip()}%"
+        conditions.append("(invoice_number LIKE ? OR customer_name LIKE ? OR customer_email LIKE ? OR kid_number LIKE ?)")
+        params.extend([s, s, s, s])
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += " ORDER BY id DESC"
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    invoices_list = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["line_items"] = json.loads(d["line_items"])
+        except Exception:
+            d["line_items"] = []
+        invoices_list.append(d)
+
+    conn.close()
+    return {
+        "success": True,
+        "stats": {
+            "total_unpaid": total_unpaid,
+            "unpaid_count": unpaid_count,
+            "total_paid": total_paid,
+            "paid_count": paid_count,
+            "total_overdue": total_overdue,
+            "overdue_count": overdue_count
+        },
+        "invoices": invoices_list
+    }
+
+
+@app.get("/api/invoices/from-order/{order_id}")
+async def get_invoice_draft_from_order(order_id: int):
+    """Generates pre-filled invoice draft from an order."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+    o = cursor.fetchone()
+    if not o:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Ordre ikke funnet.")
+
+    now = datetime.now()
+    inv_date = now.strftime("%Y-%m-%d")
+    due_date = (now + timedelta(days=14)).strftime("%Y-%m-%d")
+    
+    # Generate draft line items
+    line_items = []
+    main_price = o["total_price"]
+    selected_opts = []
+    try:
+        if o["selected_options"]:
+            selected_opts = json.loads(o["selected_options"])
+    except Exception:
+        selected_opts = []
+
+    # Calculate options subtotal
+    opts_total = sum(opt.get("price", 0) for opt in selected_opts)
+    base_service_price = max(0.0, main_price - opts_total)
+
+    net_base = round(base_service_price / 1.25, 2)
+    line_items.append({
+        "description": f"{o['service_title']} ({o['variant_name'] or 'Standard'})",
+        "quantity": 1,
+        "unit_price": net_base,
+        "vat_rate": 25.0,
+        "amount": net_base
+    })
+
+    for opt in selected_opts:
+        opt_net = round(opt.get("price", 0) / 1.25, 2)
+        line_items.append({
+            "description": f"Tillegg: {opt.get('name', 'Tilleggsvalg')}",
+            "quantity": 1,
+            "unit_price": opt_net,
+            "vat_rate": 25.0,
+            "amount": opt_net
+        })
+
+    subtotal_net = sum(item["amount"] for item in line_items)
+    vat_total = round(subtotal_net * 0.25, 2)
+    total_gross = round(subtotal_net + vat_total, 2)
+
+    # Fetch company settings
+    cursor.execute("SELECT * FROM company_settings ORDER BY id ASC LIMIT 1")
+    c_row = cursor.fetchone()
+    c_set = dict(c_row) if c_row else {
+        "bank_account": "3624.12.98765",
+        "default_due_days": 14,
+        "invoice_footer_note": "Faktura for utført oppdrag. 14 dagers forfall."
+    }
+
+    due_days = c_set.get("default_due_days") or 14
+    due_date = (now + timedelta(days=due_days)).strftime("%Y-%m-%d")
+
+    cursor.execute("SELECT MAX(id) FROM invoices")
+    max_id = cursor.fetchone()[0] or 0
+    next_num = f"FAKT-2026-{(max_id + 1):03d}"
+    kid = f"2026{(max_id + 1):03d}{random.randint(10, 99)}"
+
+    conn.close()
+    return {
+        "invoice_number": next_num,
+        "order_id": o["id"],
+        "order_number": o["order_number"],
+        "customer_name": o["customer_name"],
+        "customer_email": o["customer_email"],
+        "customer_phone": o["customer_phone"],
+        "customer_address": f"{o['street_address']}, {o['postal_code']} {o['city']}",
+        "invoice_date": inv_date,
+        "due_date": due_date,
+        "kid_number": kid,
+        "account_number": c_set.get("bank_account", "3624.12.98765"),
+        "line_items": line_items,
+        "subtotal_net": subtotal_net,
+        "vat_total": vat_total,
+        "total_gross": total_gross,
+        "notes": f"Faktura for utført oppdrag #{o['order_number']} ({o['service_title']}). {c_set.get('invoice_footer_note', '14 dagers forfall.')}",
+        "company_settings": c_set
+    }
+
+
+@app.post("/api/invoices")
+async def create_invoice(inv: InvoiceCreate):
+    """Creates a new invoice, stores it, updates order payment status and creates outbox notification."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    now = datetime.now()
+    inv_date = inv.invoice_date or now.strftime("%Y-%m-%d")
+    due_date = inv.due_date or (now + timedelta(days=14)).strftime("%Y-%m-%d")
+
+    cursor.execute("SELECT MAX(id) FROM invoices")
+    max_id = cursor.fetchone()[0] or 0
+    invoice_number = f"FAKT-2026-{(max_id + 1):03d}"
+    kid = inv.kid_number or f"2026{(max_id + 1):03d}{random.randint(10, 99)}"
+
+    # Recalculate totals
+    subtotal_net = sum(float(item.get("amount", item.get("unit_price", 0) * item.get("quantity", 1))) for item in inv.line_items)
+    vat_total = round(subtotal_net * 0.25, 2)
+    total_gross = round(subtotal_net + vat_total, 2)
+
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+    INSERT INTO invoices (
+        invoice_number, order_id, customer_name, customer_email, customer_phone,
+        customer_address, customer_org_nr, invoice_date, due_date, status,
+        payment_method, kid_number, account_number, subtotal_net, vat_total,
+        total_gross, line_items, notes, sent_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Utestående', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        invoice_number,
+        inv.order_id,
+        inv.customer_name,
+        inv.customer_email,
+        inv.customer_phone or "",
+        inv.customer_address or "",
+        inv.customer_org_nr or "",
+        inv_date,
+        due_date,
+        inv.payment_method or "Faktura (Konto/KID)",
+        kid,
+        inv.account_number or "3624.12.98765",
+        subtotal_net,
+        vat_total,
+        total_gross,
+        json.dumps(inv.line_items),
+        inv.notes or "",
+        now_str,
+        now_str
+    ))
+    new_id = cursor.lastrowid
+
+    # If linked to an order, update order payment_status to 'Faktura'
+    if inv.order_id:
+        cursor.execute("UPDATE orders SET payment_status = 'Faktura' WHERE id = ?", (inv.order_id,))
+
+    # Log in emails outbox
+    email_html = f"""
+    <div style="font-family: sans-serif; max-width: 620px; color: #1E293B; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
+      <div style="background: #0F172A; color: white; padding: 1.5rem;">
+        <h2 style="margin: 0; font-size: 1.3rem;">Servida AS — Faktura #{invoice_number}</h2>
+        <p style="margin: 0.35rem 0 0; color: #94A3B8; font-size: 0.88rem;">Takk for at du benytter Servida!</p>
+      </div>
+      <div style="padding: 1.75rem;">
+        <p>Hei <strong>{inv.customer_name}</strong>,</p>
+        <p>Vedlagt følger faktura for utført håndverkertjeneste:</p>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.25rem; margin: 1.25rem 0;">
+          <table style="width: 100%; font-size: 0.9rem;">
+            <tr><td><strong>Fakturanummer:</strong></td><td style="text-align: right;">{invoice_number}</td></tr>
+            <tr><td><strong>Forfallsdato:</strong></td><td style="text-align: right; color: #DC2626; font-weight: 700;">{due_date}</td></tr>
+            <tr><td><strong>KID-nummer:</strong></td><td style="text-align: right; font-family: monospace;">{kid}</td></tr>
+            <tr><td><strong>Kontonummer:</strong></td><td style="text-align: right; font-family: monospace;">{inv.account_number or '3624.12.98765'}</td></tr>
+            <tr style="border-top: 1px solid #CBD5E1;"><td style="padding-top: 0.5rem;"><strong>Totalbeløp å betale:</strong></td><td style="text-align: right; padding-top: 0.5rem; font-size: 1.15rem; font-weight: 800; color: #0F172A;">kr {round(total_gross):,} ,-</td></tr>
+          </table>
+        </div>
+        <p style="font-size: 0.85rem; color: #64748B;">Har du spørsmål vedrørende fakturaen, ta gjerne kontakt med oss på post@servida.no eller tlf 55 12 34 56.</p>
+      </div>
+    </div>
+    """
+    cursor.execute("""
+    INSERT INTO emails (
+        folder, sender_email, sender_name, recipient_email, recipient_name,
+        subject, body_html, body_text, category, status,
+        related_order_id, is_read, created_at
+    ) VALUES ('sent', 'faktura@servida.no', 'Servida AS Faktura', ?, ?, ?, ?, ?, 'Faktura', 'Levert', ?, 1, ?)
+    """, (
+        inv.customer_email,
+        inv.customer_name,
+        f"Faktura #{invoice_number} fra Servida AS (Forfall {due_date})",
+        email_html,
+        f"Faktura #{invoice_number} for {inv.customer_name}. Totalbeløp: kr {total_gross},- Forfall: {due_date}. KID: {kid}",
+        inv.order_id,
+        now_str
+    ))
+
+    conn.commit()
+    conn.close()
+    return {
+        "success": True,
+        "invoice_id": new_id,
+        "invoice_number": invoice_number,
+        "message": f"Faktura {invoice_number} er opprettet og sendt til {inv.customer_email}!"
+    }
+
+
+@app.get("/api/invoices/{invoice_id}")
+async def get_invoice_detail(invoice_id: int):
+    """Retrieves full invoice details with line items."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Faktura ikke funnet.")
+
+    inv = dict(row)
+    try:
+        inv["line_items"] = json.loads(inv["line_items"])
+    except Exception:
+        inv["line_items"] = []
+
+    related_order = None
+    if inv["order_id"]:
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (inv["order_id"],))
+        o_row = cursor.fetchone()
+        if o_row:
+            related_order = dict(o_row)
+
+    # Fetch company settings
+    cursor.execute("SELECT * FROM company_settings ORDER BY id ASC LIMIT 1")
+    c_row = cursor.fetchone()
+    c_set = dict(c_row) if c_row else {
+        "company_name": "Servida AS",
+        "org_number": "932 847 192 MVA",
+        "address": "Fjellveien 1, 5014 Bergen",
+        "invoice_email": "faktura@servida.no",
+        "phone": "55 12 34 56",
+        "bank_account": "3624.12.98765"
+    }
+
+    conn.close()
+    return {
+        "success": True,
+        "invoice": inv,
+        "related_order": related_order,
+        "company_settings": c_set
+    }
+
+
+@app.put("/api/invoices/{invoice_id}/status")
+async def update_invoice_status(invoice_id: int, payload: InvoiceStatusUpdate):
+    """Updates invoice payment status."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Faktura ikke funnet.")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    paid_at = now_str if payload.status == "Betalt" else row["paid_at"]
+
+    cursor.execute("""
+    UPDATE invoices
+    SET status = ?, paid_at = ?
+    WHERE id = ?
+    """, (payload.status, paid_at, invoice_id))
+
+    # If status is 'Betalt' and linked to an order, update order payment_status
+    if payload.status == "Betalt" and row["order_id"]:
+        cursor.execute("UPDATE orders SET payment_status = 'Betalt' WHERE id = ?", (row["order_id"],))
+
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": f"Fakturastatus oppdatert til '{payload.status}'."}
+
+
+@app.post("/api/invoices/{invoice_id}/send-email")
+async def send_invoice_email(invoice_id: int):
+    """Sends invoice directly to customer email."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,))
+    inv = cursor.fetchone()
+    if not inv:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Faktura ikke funnet.")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("UPDATE invoices SET sent_at = ? WHERE id = ?", (now_str, invoice_id))
+
+    email_html = f"""
+    <div style="font-family: sans-serif; max-width: 620px; color: #1E293B; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
+      <div style="background: #0F172A; color: white; padding: 1.5rem;">
+        <h2 style="margin: 0; font-size: 1.3rem;">Servida AS — Faktura #{inv['invoice_number']}</h2>
+        <p style="margin: 0.35rem 0 0; color: #94A3B8; font-size: 0.88rem;">Fakturakopi / Betalingsinformasjon</p>
+      </div>
+      <div style="padding: 1.75rem;">
+        <p>Hei <strong>{inv['customer_name']}</strong>,</p>
+        <p>Her er betalingsdetaljene for din faktura #{inv['invoice_number']}:</p>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.25rem; margin: 1.25rem 0;">
+          <table style="width: 100%; font-size: 0.9rem;">
+            <tr><td><strong>Fakturanummer:</strong></td><td style="text-align: right;">{inv['invoice_number']}</td></tr>
+            <tr><td><strong>Forfallsdato:</strong></td><td style="text-align: right; color: #DC2626; font-weight: 700;">{inv['due_date']}</td></tr>
+            <tr><td><strong>KID-nummer:</strong></td><td style="text-align: right; font-family: monospace;">{inv['kid_number']}</td></tr>
+            <tr><td><strong>Kontonummer:</strong></td><td style="text-align: right; font-family: monospace;">{inv['account_number']}</td></tr>
+            <tr style="border-top: 1px solid #CBD5E1;"><td style="padding-top: 0.5rem;"><strong>Totalbeløp:</strong></td><td style="text-align: right; padding-top: 0.5rem; font-size: 1.15rem; font-weight: 800; color: #0F172A;">kr {round(inv['total_gross']):,} ,-</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    """
+    cursor.execute("""
+    INSERT INTO emails (
+        folder, sender_email, sender_name, recipient_email, recipient_name,
+        subject, body_html, body_text, category, status,
+        related_order_id, is_read, created_at
+    ) VALUES ('sent', 'faktura@servida.no', 'Servida AS Faktura', ?, ?, ?, ?, ?, 'Faktura', 'Levert', ?, 1, ?)
+    """, (
+        inv["customer_email"],
+        inv["customer_name"],
+        f"Faktura #{inv['invoice_number']} fra Servida AS",
+        email_html,
+        f"Faktura #{inv['invoice_number']} for {inv['customer_name']}. Total: kr {inv['total_gross']},-",
+        inv["order_id"],
+        now_str
+    ))
+
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": f"Faktura {inv['invoice_number']} er sendt på e-post til {inv['customer_email']}!"}
+
+
+# ============================================================================
+# COMPANY & SELLER SETTINGS ENDPOINTS (FIRMAPROFIL & FAKTURAINNSTILLINGER)
+# ============================================================================
+
+class CompanySettingsUpdate(BaseModel):
+    company_name: str
+    org_number: str
+    address: str
+    post_code: Optional[str] = "5014"
+    city: Optional[str] = "Bergen"
+    invoice_email: str
+    support_email: Optional[str] = "post@servida.no"
+    phone: str
+    bank_account: str
+    iban: Optional[str] = ""
+    swift_bic: Optional[str] = ""
+    default_due_days: Optional[int] = 14
+    invoice_footer_note: Optional[str] = "Takk for at du valgte Servida AS! Faktura for utført arbeid iht. avtale."
+
+
+@app.get("/api/company-settings")
+async def get_company_settings():
+    """Retrieves company seller information for invoices and contracts."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM company_settings ORDER BY id ASC LIMIT 1")
+    row = cursor.fetchone()
+    if not row:
+        # Fallback default
+        settings = {
+            "id": 1,
+            "company_name": "Servida AS",
+            "org_number": "932 847 192 MVA",
+            "address": "Fjellveien 1, 5014 Bergen",
+            "post_code": "5014",
+            "city": "Bergen",
+            "invoice_email": "faktura@servida.no",
+            "support_email": "post@servida.no",
+            "phone": "55 12 34 56",
+            "bank_account": "3624.12.98765",
+            "iban": "NO93 3624 1298 765",
+            "swift_bic": "DNBANOKK",
+            "default_due_days": 14,
+            "invoice_footer_note": "Takk for at du valgte Servida AS! Faktura for utført arbeid iht. avtale."
+        }
+    else:
+        settings = dict(row)
+    conn.close()
+    return {"success": True, "settings": settings}
+
+
+@app.put("/api/company-settings")
+async def update_company_settings(payload: CompanySettingsUpdate):
+    """Updates company profile and seller information displayed on invoices and documents."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("SELECT id FROM company_settings ORDER BY id ASC LIMIT 1")
+    row = cursor.fetchone()
+
+    if row:
+        cursor.execute("""
+        UPDATE company_settings
+        SET company_name = ?, org_number = ?, address = ?, post_code = ?, city = ?,
+            invoice_email = ?, support_email = ?, phone = ?, bank_account = ?,
+            iban = ?, swift_bic = ?, default_due_days = ?, invoice_footer_note = ?, updated_at = ?
+        WHERE id = ?
+        """, (
+            payload.company_name, payload.org_number, payload.address, payload.post_code, payload.city,
+            payload.invoice_email, payload.support_email, payload.phone, payload.bank_account,
+            payload.iban, payload.swift_bic, payload.default_due_days, payload.invoice_footer_note,
+            now_str, row["id"]
+        ))
+    else:
+        cursor.execute("""
+        INSERT INTO company_settings (
+            company_name, org_number, address, post_code, city,
+            invoice_email, support_email, phone, bank_account,
+            iban, swift_bic, default_due_days, invoice_footer_note, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            payload.company_name, payload.org_number, payload.address, payload.post_code, payload.city,
+            payload.invoice_email, payload.support_email, payload.phone, payload.bank_account,
+            payload.iban, payload.swift_bic, payload.default_due_days, payload.invoice_footer_note, now_str
+        ))
+
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": "Bedriftsprofil og fakturainnstillinger er lagret!"}
+
+
 
 
 

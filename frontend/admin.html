@@ -45,6 +45,11 @@
         <span>💰</span> Regnskap & Økonomi
       </button>
 
+      <button class="admin-nav-item" data-view="invoices" id="nav-item-invoices" data-role="admin">
+        <span>🧾</span> Fakturasenter
+        <span class="admin-badge-count" id="badge-unpaid-invoices" style="background: #DC2626;">0</span>
+      </button>
+
       <button class="admin-nav-item" data-view="email" id="nav-item-email" data-role="admin">
         <span>✉️</span> E-postsenter
         <span class="admin-badge-count" id="badge-unread-emails" style="background: #2563EB;">0</span>
@@ -216,64 +221,145 @@
       <section id="view-calendar" style="display: none;">
         <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
           
-          <!-- Dispatch Header -->
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+          <!-- Calendar Mode Selector Tabs -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--admin-border);">
             <div>
               <h3 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
-                📅 <span id="dispatch-view-heading">Håndverker Dagsplan & Vaktliste</span>
+                📅 <span id="dispatch-view-heading">Håndverker Kalender & Oppdragsoversikt</span>
               </h3>
               <p style="color: #64748B; font-size: 0.88rem; margin: 0;" id="dispatch-view-subhead">
-                Oversikt over oppdrag, tidsrom, adresser og kjøreruter for hver enkelt håndverker gjennom dagen.
+                Full månedskalender over alle bookinger og oppdrag, samt detaljerte dagsplaner og kjøreruter for håndverkere.
               </p>
             </div>
 
-            <!-- Date Selector & Quick Filters -->
-            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-              <button class="btn-primary-sm btn-cal-quick-date active" data-date="today" style="background: #0F172A; color: white; height: 38px; padding: 0 0.85rem; border-radius: 6px; font-weight: 700; border: none; cursor: pointer;">
-                ⚡ I dag
+            <!-- View Switcher (Måned / Dag) -->
+            <div style="display: flex; background: #F1F5F9; padding: 0.25rem; border-radius: 8px; border: 1px solid var(--admin-border);">
+              <button id="btn-cal-mode-month" class="btn-cal-mode active" style="background: #0F172A; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+                📅 Månedsoversikt
               </button>
-              <button class="btn-primary-sm btn-cal-quick-date" data-date="tomorrow" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); height: 38px; padding: 0 0.85rem; border-radius: 6px; font-weight: 700; cursor: pointer;">
-                ➡️ I morgen
+              <button id="btn-cal-mode-day" class="btn-cal-mode" style="background: transparent; color: #475569; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+                📆 Dagsplan & Kjørerute
               </button>
-              <input type="date" id="cal-date-input" style="height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem; font-weight: 600;">
-              
-              <select id="cal-handyman-filter" style="height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem; font-weight: 600;">
-                <option value="alle">Alle håndverkere</option>
-                <!-- Rendered dynamically -->
-              </select>
             </div>
           </div>
 
-          <!-- Day Summary Stats Banner -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
-              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Valgt dato</span>
-              <div style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-top: 0.25rem;" id="cal-display-date">I dag</div>
-            </div>
-            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
-              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Dagens Oppdrag</span>
-              <div style="font-size: 1.25rem; font-weight: 800; color: #3B82F6; margin-top: 0.25rem;" id="cal-total-jobs">0 oppdrag</div>
-            </div>
-            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
-              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Aktive Håndverkere</span>
-              <div style="font-size: 1.25rem; font-weight: 800; color: #059669; margin-top: 0.25rem;" id="cal-active-handymen-count">0 på jobb</div>
-            </div>
-          </div>
+          <!-- ========================================== -->
+          <!-- 1. MONTH VIEW WRAPPER                      -->
+          <!-- ========================================== -->
+          <div id="cal-month-view-wrap">
+            <!-- Month Navigation & Filters -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <button id="btn-cal-prev-month" style="width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--admin-border); background: #F8FAFC; font-weight: 800; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;">
+                  ◀
+                </button>
+                <h4 id="cal-month-title" style="font-size: 1.3rem; font-weight: 800; color: #0F172A; margin: 0; min-width: 180px; text-align: center;">
+                  August 2026
+                </h4>
+                <button id="btn-cal-next-month" style="width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--admin-border); background: #F8FAFC; font-weight: 800; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;">
+                  ▶
+                </button>
+                <button id="btn-cal-current-month" style="height: 38px; padding: 0 0.85rem; border-radius: 8px; border: 1px solid var(--admin-border); background: white; font-weight: 700; font-size: 0.82rem; cursor: pointer;">
+                  ⚡ Denne måneden
+                </button>
+              </div>
 
-          <!-- Unassigned Jobs Banner (Admin alert if any unassigned orders exist on this day) -->
-          <div id="cal-unassigned-banner" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1.3rem;">🚨</span>
-                <strong style="color: #991B1B; font-size: 0.92rem;" id="cal-unassigned-msg">0 oppdrag mangler tildelt håndverker på denne datoen</strong>
+              <!-- Month Filters -->
+              <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <select id="cal-month-handyman-filter" style="height: 38px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.85rem; font-weight: 600;">
+                  <option value="alle">Alle håndverkere</option>
+                </select>
+
+                <select id="cal-month-status-filter" style="height: 38px; border-radius: 8px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.85rem; font-weight: 600;">
+                  <option value="alle">Alle oppdragsstatuser</option>
+                  <option value="Ny bestilling">🚨 Ny bestilling</option>
+                  <option value="Bekreftet">📅 Bekreftet</option>
+                  <option value="Håndverker tildelt">👷 Håndverker tildelt</option>
+                  <option value="På vei">🚗 På vei</option>
+                  <option value="Pågår">🔨 Pågår</option>
+                  <option value="Utført">✅ Utført</option>
+                  <option value="Fakturert">💳 Fakturert</option>
+                </select>
               </div>
             </div>
-            <div id="cal-unassigned-list" style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
+
+            <!-- Month KPI Summary Cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Månedens Oppdrag</span>
+                <div style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin-top: 0.2rem;" id="cal-month-kpi-jobs">0 oppdrag</div>
+              </div>
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Månedsomsetning (Brutto)</span>
+                <div style="font-size: 1.35rem; font-weight: 800; color: #059669; margin-top: 0.2rem;" id="cal-month-kpi-rev">kr 0,-</div>
+              </div>
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Ubesatte Oppdrag</span>
+                <div style="font-size: 1.35rem; font-weight: 800; color: #DC2626; margin-top: 0.2rem;" id="cal-month-kpi-unassigned">0 ubesatte</div>
+              </div>
+            </div>
+
+            <!-- 7-Column Month Calendar Grid -->
+            <div class="month-calendar-grid" id="cal-month-grid">
+              <!-- Rendered dynamically by admin.js -->
+            </div>
           </div>
 
-          <!-- Handymen Dispatch Schedules Matrix -->
-          <div id="calendar-dispatch-matrix" style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <!-- Rendered by admin.js -->
+          <!-- ========================================== -->
+          <!-- 2. DAY DISPATCH WRAPPER                    -->
+          <!-- ========================================== -->
+          <div id="cal-day-view-wrap" style="display: none;">
+            <!-- Date Selector & Quick Filters -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <button class="btn-primary-sm btn-cal-quick-date active" data-date="today" style="background: #0F172A; color: white; height: 38px; padding: 0 0.85rem; border-radius: 6px; font-weight: 700; border: none; cursor: pointer;">
+                  ⚡ I dag
+                </button>
+                <button class="btn-primary-sm btn-cal-quick-date" data-date="tomorrow" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); height: 38px; padding: 0 0.85rem; border-radius: 6px; font-weight: 700; cursor: pointer;">
+                  ➡️ I morgen
+                </button>
+                <input type="date" id="cal-date-input" style="height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem; font-weight: 600;">
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <select id="cal-handyman-filter" style="height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem; font-weight: 600;">
+                  <option value="alle">Alle håndverkere</option>
+                  <!-- Rendered dynamically -->
+                </select>
+              </div>
+            </div>
+
+            <!-- Day Summary Stats Banner -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Valgt dato</span>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-top: 0.25rem;" id="cal-display-date">I dag</div>
+              </div>
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Dagens Oppdrag</span>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #3B82F6; margin-top: 0.25rem;" id="cal-total-jobs">0 oppdrag</div>
+              </div>
+              <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">Aktive Håndverkere</span>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #059669; margin-top: 0.25rem;" id="cal-active-handymen-count">0 på jobb</div>
+              </div>
+            </div>
+
+            <!-- Unassigned Jobs Banner -->
+            <div id="cal-unassigned-banner" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-size: 1.3rem;">🚨</span>
+                  <strong style="color: #991B1B; font-size: 0.92rem;" id="cal-unassigned-msg">0 oppdrag mangler tildelt håndverker på denne datoen</strong>
+                </div>
+              </div>
+              <div id="cal-unassigned-list" style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
+            </div>
+
+            <!-- Handymen Dispatch Schedules Matrix -->
+            <div id="calendar-dispatch-matrix" style="display: flex; flex-direction: column; gap: 1.5rem;">
+              <!-- Rendered by admin.js -->
+            </div>
           </div>
 
         </div>
@@ -458,10 +544,10 @@
             </div>
 
             <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-              <button id="btn-open-create-expense" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+              <button type="button" id="btn-open-create-expense" onclick="openCreateExpenseModal()" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
                 ➕ Registrer utgift / Last opp bilag
               </button>
-              <button id="btn-export-saf-t" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+              <button type="button" id="btn-export-saf-t" onclick="exportAccountingCSV()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
                 📥 Eksporter til regnskapsfører (CSV)
               </button>
             </div>
@@ -719,13 +805,13 @@
             </div>
 
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button id="btn-open-compose-email" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+              <button type="button" id="btn-open-compose-email" onclick="openComposeEmailModal()" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
                 ➕ Skriv ny e-post
               </button>
-              <button id="btn-refresh-emails" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 0.95rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+              <button type="button" id="btn-refresh-emails" onclick="loadEmails()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 0.95rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
                 🔄 Oppdater
               </button>
-              <button id="btn-open-email-settings" style="background: #F8FAFC; color: #475569; border: 1px solid var(--admin-border); padding: 0.65rem 0.95rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+              <button type="button" id="btn-open-email-settings" onclick="openEmailSettingsModal()" style="background: #F8FAFC; color: #475569; border: 1px solid var(--admin-border); padding: 0.65rem 0.95rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
                 ⚙️ SMTP & Innstillinger
               </button>
             </div>
@@ -737,19 +823,19 @@
             <!-- Column 1: Folders & Categories -->
             <div style="border-right: 1px solid var(--admin-border); padding-right: 1rem;">
               <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1.5rem;">
-                <button class="email-folder-btn active" data-folder="inbox" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: #F1F5F9; font-weight: 700; color: #0F172A; cursor: pointer; font-size: 0.88rem;">
+                <button type="button" class="email-folder-btn active" data-folder="inbox" onclick="switchEmailFolder('inbox')" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: #F1F5F9; font-weight: 700; color: #0F172A; cursor: pointer; font-size: 0.88rem;">
                   <span>📥 Innboks</span>
                   <span id="email-inbox-count" style="background: #2563EB; color: white; padding: 0.1rem 0.45rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 800;">0</span>
                 </button>
-                <button class="email-folder-btn" data-folder="sent" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: transparent; font-weight: 600; color: #475569; cursor: pointer; font-size: 0.88rem;">
+                <button type="button" class="email-folder-btn" data-folder="sent" onclick="switchEmailFolder('sent')" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: transparent; font-weight: 600; color: #475569; cursor: pointer; font-size: 0.88rem;">
                   <span>📤 Sendte</span>
                   <span id="email-sent-count" style="color: #64748B; font-size: 0.75rem;">0</span>
                 </button>
-                <button class="email-folder-btn" data-folder="automated" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: transparent; font-weight: 600; color: #475569; cursor: pointer; font-size: 0.88rem;">
+                <button type="button" class="email-folder-btn" data-folder="automated" onclick="switchEmailFolder('automated')" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: transparent; font-weight: 600; color: #475569; cursor: pointer; font-size: 0.88rem;">
                   <span>⚡ Autovarsler</span>
                   <span id="email-auto-count" style="color: #64748B; font-size: 0.75rem;">0</span>
                 </button>
-                <button class="email-folder-btn" data-folder="trash" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: transparent; font-weight: 600; color: #475569; cursor: pointer; font-size: 0.88rem;">
+                <button type="button" class="email-folder-btn" data-folder="trash" onclick="switchEmailFolder('trash')" style="display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: 8px; border: none; background: transparent; font-weight: 600; color: #475569; cursor: pointer; font-size: 0.88rem;">
                   <span>🗑️ Papirkurv</span>
                 </button>
               </div>
@@ -759,22 +845,22 @@
                 Kategorier
               </div>
               <div style="display: flex; flex-direction: column; gap: 0.3rem;" id="email-category-filter-list">
-                <button class="email-cat-btn active" data-cat="Alle" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: #F8FAFC; font-size: 0.82rem; font-weight: 700; color: #0F172A; cursor: pointer;">
+                <button type="button" class="email-cat-btn active" data-cat="Alle" onclick="filterEmailCategory('Alle')" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: #F8FAFC; font-size: 0.82rem; font-weight: 700; color: #0F172A; cursor: pointer;">
                   🔘 Alle henvendelser
                 </button>
-                <button class="email-cat-btn" data-cat="Kundehenvendelse" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
+                <button type="button" class="email-cat-btn" data-cat="Kundehenvendelse" onclick="filterEmailCategory('Kundehenvendelse')" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
                   🔵 Kundemeldinger
                 </button>
-                <button class="email-cat-btn" data-cat="Ordrebekreftelse" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
+                <button type="button" class="email-cat-btn" data-cat="Ordrebekreftelse" onclick="filterEmailCategory('Ordrebekreftelse')" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
                   🟢 Ordrebekreftelser
                 </button>
-                <button class="email-cat-btn" data-cat="Oppdrag" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
+                <button type="button" class="email-cat-btn" data-cat="Oppdrag" onclick="filterEmailCategory('Oppdrag')" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
                   🔨 Håndverker-oppdrag
                 </button>
-                <button class="email-cat-btn" data-cat="Tilbud" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
+                <button type="button" class="email-cat-btn" data-cat="Tilbud" onclick="filterEmailCategory('Tilbud')" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
                   🟡 Pristilbud & Faktura
                 </button>
-                <button class="email-cat-btn" data-cat="System" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
+                <button type="button" class="email-cat-btn" data-cat="System" onclick="filterEmailCategory('System')" style="text-align: left; padding: 0.45rem 0.65rem; border-radius: 6px; border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;">
                   🟣 Systemvarsler
                 </button>
               </div>
@@ -797,6 +883,111 @@
               <!-- Selected email rendered here -->
             </div>
 
+          </div>
+
+        </div>
+      </section>
+
+      <!-- VIEW 9: FAKTURERING & BETALINGSOPPFØLGING -->
+      <section id="view-invoices" style="display: none;">
+        <div style="background: white; border: 1px solid var(--admin-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+          
+          <!-- Header -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                🧾 Fakturering & Betalingsoppfølging
+              </h3>
+              <p style="color: #64748B; font-size: 0.88rem; margin: 0;">
+                Opprett og send faktura med KID og kontonummer til kunder som ikke har betalt med Vipps på stedet.
+              </p>
+            </div>
+
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+              <button type="button" id="btn-open-create-invoice" onclick="openCreateInvoiceModal()" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                ➕ Opprett ny faktura
+              </button>
+              <button type="button" id="btn-open-company-settings" onclick="openCompanySettingsModal()" style="background: #F8FAFC; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+                🏢 Firmaprofil & Selgerinfo
+              </button>
+              <button type="button" id="btn-refresh-invoices" onclick="loadInvoices()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 0.95rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+                🔄 Oppdater
+              </button>
+              <button type="button" id="btn-export-invoices-csv" onclick="exportInvoicesCSV()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+                📥 Eksporter fakturajournal (CSV)
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Summary Cards -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+            <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #991B1B; display: block;">⏳ Utestående Fakturabeløp</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #DC2626; margin: 0.25rem 0;" id="inv-kpi-unpaid-sum">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #7F1D1D;" id="inv-kpi-unpaid-count">0 fakturaer venter på betaling</span>
+            </div>
+
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #166534; display: block;">✅ Innbetalt (Denne måneden)</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #059669; margin: 0.25rem 0;" id="inv-kpi-paid-sum">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #15803D;" id="inv-kpi-paid-count">0 innbetalte fakturaer</span>
+            </div>
+
+            <div style="background: #FFF1F2; border: 1px solid #FFE4E6; border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #BE123C; display: block;">🔴 Forfalte Fakturaer</span>
+              <div style="font-size: 1.45rem; font-weight: 800; color: #E11D48; margin: 0.25rem 0;" id="inv-kpi-overdue-sum">kr 0,-</div>
+              <span style="font-size: 0.75rem; color: #9F1239;" id="inv-kpi-overdue-count">0 forfalte (Purring klargjort)</span>
+            </div>
+
+            <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 12px; padding: 1.15rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">🏦 Servida Driftskonto</span>
+              <div style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin: 0.25rem 0; font-family: monospace;">3624.12.98765</div>
+              <span style="font-size: 0.75rem; color: #64748B;">Standard innbetalingskonto med KID</span>
+            </div>
+          </div>
+
+          <!-- Filter & Search Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <button type="button" class="inv-filter-btn active" data-status="Alle" onclick="filterInvoicesByStatus('Alle')" style="padding: 0.45rem 0.85rem; border-radius: 6px; border: none; background: #0F172A; color: white; font-weight: 700; font-size: 0.82rem; cursor: pointer;">
+                Alle
+              </button>
+              <button type="button" class="inv-filter-btn" data-status="Utestående" onclick="filterInvoicesByStatus('Utestående')" style="padding: 0.45rem 0.85rem; border-radius: 6px; border: 1px solid var(--admin-border); background: white; color: #475569; font-weight: 600; font-size: 0.82rem; cursor: pointer;">
+                ⏳ Utestående
+              </button>
+              <button type="button" class="inv-filter-btn" data-status="Forfalt" onclick="filterInvoicesByStatus('Forfalt')" style="padding: 0.45rem 0.85rem; border-radius: 6px; border: 1px solid #FECACA; background: #FEF2F2; color: #DC2626; font-weight: 700; font-size: 0.82rem; cursor: pointer;">
+                🔴 Forfalt
+              </button>
+              <button type="button" class="inv-filter-btn" data-status="Betalt" onclick="filterInvoicesByStatus('Betalt')" style="padding: 0.45rem 0.85rem; border-radius: 6px; border: 1px solid var(--admin-border); background: white; color: #475569; font-weight: 600; font-size: 0.82rem; cursor: pointer;">
+                ✅ Betalt
+              </button>
+            </div>
+
+            <div>
+              <input type="text" id="inv-search-input" placeholder="🔍 Søk fakturanr, kunde, KID..." oninput="handleInvoiceSearch(this.value)" style="height: 38px; width: 260px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.75rem; font-size: 0.85rem;">
+            </div>
+          </div>
+
+          <!-- Invoices Table -->
+          <div class="admin-table-card">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Fakturanr</th>
+                  <th>Kunde</th>
+                  <th>Fakturadato</th>
+                  <th>Forfallsdato</th>
+                  <th>Beløp (Brutto)</th>
+                  <th>Netto / MVA</th>
+                  <th>KID-nummer</th>
+                  <th>Status</th>
+                  <th>Handlinger</th>
+                </tr>
+              </thead>
+              <tbody id="invoices-table-tbody">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
           </div>
 
         </div>
@@ -932,6 +1123,10 @@
 
         <button id="btn-save-order-updates" style="width: 100%; height: 44px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.95rem;">
           💾 Lagre endringer
+        </button>
+
+        <button type="button" id="btn-drawer-create-invoice" onclick="openCreateInvoiceForOrder(activeOrder ? activeOrder.id : null)" style="width: 100%; height: 40px; background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-top: 0.6rem;">
+          🧾 Opprett / Send Faktura til kunde
         </button>
       </div>
 
@@ -1286,9 +1481,14 @@
 
         <div id="create-emp-error-msg" style="color: #DC2626; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.75rem; display: none;"></div>
 
-        <button type="submit" id="btn-submit-create-employee" style="width: 100%; height: 46px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
-          💾 Opprett håndverkerprofil
-        </button>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" onclick="closeCreateEmployeeModal()" style="flex: 1; height: 46px; background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+            Avbryt
+          </button>
+          <button type="submit" id="btn-submit-create-employee" style="flex: 1.5; height: 46px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
+            💾 Opprett håndverkerprofil
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -1298,8 +1498,8 @@
        LOG HOURS MODAL (ADMIN TO EMPLOYEE)
        ========================================================================== -->
   <div class="admin-modal-overlay" id="modal-log-hours" style="display: none;">
-    <div style="background: white; border-radius: 16px; width: 100%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
-      <button id="btn-close-log-hours" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; z-index: 1001;">
+      <button type="button" id="btn-close-log-hours" onclick="closeAdminLogHoursModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
 
       <h3 style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;" id="modal-log-hours-title">
         ⏱️ Før timer for Ansatt
@@ -1327,9 +1527,14 @@
           <input type="text" id="admin-log-desc" required placeholder="F.eks. Montering av ytterdør hos Hansen" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
         </div>
 
-        <button type="submit" id="btn-save-admin-log-hours" style="width: 100%; height: 44px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer;">
-          💾 Før timer
-        </button>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" onclick="closeAdminLogHoursModal()" style="flex: 1; height: 44px; background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+            Avbryt
+          </button>
+          <button type="submit" id="btn-save-admin-log-hours" style="flex: 1.5; height: 44px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer;">
+            💾 Før timer
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -1339,8 +1544,8 @@
        EDIT EMPLOYEE MODAL
        ========================================================================== -->
   <div class="admin-modal-overlay" id="modal-edit-employee" style="display: none;">
-    <div style="background: white; border-radius: 16px; width: 100%; max-width: 520px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
-      <button id="btn-close-edit-employee" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 520px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; z-index: 1001;">
+      <button type="button" id="btn-close-edit-employee" onclick="closeEditEmployeeModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
 
       <h3 style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">
         ✏️ Rediger håndverkerprofil
@@ -1402,9 +1607,14 @@
           <textarea id="edit-emp-bio" rows="2" style="width: 100%; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0.4rem 0.6rem; font-size: 0.85rem;"></textarea>
         </div>
 
-        <button type="submit" id="btn-save-edit-employee" style="width: 100%; height: 44px; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer;">
-          💾 Lagre endringer
-        </button>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" onclick="closeEditEmployeeModal()" style="flex: 1; height: 44px; background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+            Lukk / Avbryt
+          </button>
+          <button type="submit" id="btn-save-edit-employee" style="flex: 1.5; height: 44px; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer;">
+            💾 Lagre endringer
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -1413,8 +1623,8 @@
        CREATE EXPENSE MODAL (REGNSKAP & BILAG)
        ========================================================================== -->
   <div class="admin-modal-overlay" id="modal-create-expense" style="display: none;">
-    <div style="background: white; border-radius: 16px; width: 100%; max-width: 520px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative;">
-      <button id="btn-close-create-expense" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 520px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; z-index: 1001;">
+      <button type="button" id="btn-close-create-expense" onclick="closeCreateExpenseModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
 
       <h3 style="font-size: 1.3rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">
         ➕ Registrer ny utgift / Last opp bilag
@@ -1472,9 +1682,14 @@
           <input type="text" id="new-exp-notes" placeholder="F.eks. Faktura #98124 eller korttransaksjon" style="width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.65rem; font-size: 0.88rem;">
         </div>
 
-        <button type="submit" id="btn-save-create-expense" style="width: 100%; height: 46px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
-          💾 Lagre utgift i regnskapet
-        </button>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" onclick="closeCreateExpenseModal()" style="flex: 1; height: 46px; background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+            Avbryt
+          </button>
+          <button type="submit" id="btn-save-create-expense" style="flex: 1.5; height: 46px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
+            💾 Lagre utgift i regnskapet
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -1484,8 +1699,8 @@
        EMPLOYMENT CONTRACT MODAL & GENERATOR (ARBEIDSAVTALE AML § 14-6)
        ========================================================================== -->
   <div class="admin-modal-overlay" id="modal-contract-viewer" style="display: none;">
-    <div style="background: white; border-radius: 16px; width: 100%; max-width: 780px; padding: 2.25rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto;">
-      <button id="btn-close-contract-viewer" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer;">✕</button>
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 780px; padding: 2.25rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+      <button type="button" id="btn-close-contract-viewer" onclick="closeContractViewer()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
 
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0F172A; padding-bottom: 1rem; margin-bottom: 1.5rem;">
         <div>
@@ -1729,6 +1944,364 @@
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--admin-border); padding-top: 1rem;">
           <button type="submit" id="btn-save-email-settings" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.4rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer;">
             💾 Lagre innstillinger
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       CREATE INVOICE MODAL (FAKTURAOPPRETTELSE)
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-create-invoice" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 720px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+      <button type="button" id="btn-close-create-invoice" onclick="closeCreateInvoiceModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
+
+      <h3 style="font-size: 1.3rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">
+        🧾 Opprett ny faktura
+      </h3>
+      <p style="color: #64748B; font-size: 0.85rem; margin-bottom: 1.25rem;">
+        Lag faktura for utført arbeid dersom kunden ikke har betalt med Vipps på stedet. Fakturaen sendes med KID og forfallsdato.
+      </p>
+
+      <form id="form-create-invoice" onsubmit="return false;">
+        <input type="hidden" id="inv-create-order-id">
+
+        <!-- Customer & Order details -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Kundenavn *</label>
+              <input type="text" id="inv-create-customer-name" required placeholder="F.eks. Ole Christian Hansen" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem; font-weight: 700;">
+            </div>
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Kunde E-post *</label>
+              <input type="email" id="inv-create-customer-email" required placeholder="kunde@eksempel.no" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Telefon</label>
+              <input type="text" id="inv-create-customer-phone" placeholder="F.eks. 987 65 432" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.85rem;">
+            </div>
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Fakturaadresse</label>
+              <input type="text" id="inv-create-customer-address" placeholder="Gateadresse, poststed" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.85rem;">
+            </div>
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Org.nr (Bedriftskunde)</label>
+              <input type="text" id="inv-create-customer-org" placeholder="Valgfritt" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.85rem;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Dates and Payment Info -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Fakturadato</label>
+            <input type="date" id="inv-create-date" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Forfallsdato (Standard 14d)</label>
+            <input type="date" id="inv-create-due-date" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem; font-weight: 700; color: #DC2626;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Innbetalingskonto</label>
+            <input type="text" id="inv-create-account" value="3624.12.98765" readonly style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem; font-family: monospace; background: #F1F5F9;">
+          </div>
+        </div>
+
+        <!-- Dynamic Line Items -->
+        <div style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <label style="font-size: 0.85rem; font-weight: 800; color: #0F172A;">Fakturalinjer & Tjenester</label>
+            <button type="button" onclick="addInvoiceLineItemRow()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.25rem 0.65rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+              ➕ Legg til linje
+            </button>
+          </div>
+
+          <div style="background: white; border: 1px solid var(--admin-border); border-radius: 8px; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+              <thead style="background: #F8FAFC; border-bottom: 1px solid var(--admin-border);">
+                <tr>
+                  <th style="padding: 0.5rem; text-align: left;">Beskrivelse</th>
+                  <th style="padding: 0.5rem; width: 65px; text-align: center;">Antall</th>
+                  <th style="padding: 0.5rem; width: 100px; text-align: right;">Netto pris (kr)</th>
+                  <th style="padding: 0.5rem; width: 85px; text-align: center;">MVA %</th>
+                  <th style="padding: 0.5rem; width: 100px; text-align: right;">Sum (kr)</th>
+                  <th style="padding: 0.5rem; width: 35px;"></th>
+                </tr>
+              </thead>
+              <tbody id="inv-create-lines-tbody">
+                <!-- Lines injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Totals summary box -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 0.85rem; color: #64748B;">
+            <div>Netto grunnlag: <strong id="inv-calc-net" style="color: #0F172A;">kr 0,-</strong></div>
+            <div>Utgående MVA (25%): <strong id="inv-calc-vat" style="color: #0F172A;">kr 0,-</strong></div>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 0.78rem; font-weight: 700; color: #64748B; display: block;">TOTALT Å BETALE:</span>
+            <span id="inv-calc-gross" style="font-size: 1.5rem; font-weight: 900; color: #0F172A;">kr 0,-</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Betalingsbetingelser / Notat til kunde</label>
+          <input type="text" id="inv-create-notes" value="Faktura for utført håndverkertjeneste. 14 dagers betalingsfrist. Takk for at du valgte Servida!" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.85rem;">
+        </div>
+
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" onclick="closeCreateInvoiceModal()" style="flex: 1; height: 46px; background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+            Avbryt
+          </button>
+          <button type="submit" id="btn-submit-create-invoice" style="flex: 1.5; height: 46px; background: #0F172A; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer;">
+            💾 Opprett & Send Faktura
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       INVOICE VIEWER MODAL (FAKTURA PREVIEW / PRINT)
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-invoice-viewer" style="display: none;">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 780px; padding: 2.25rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+      <button type="button" id="btn-close-invoice-viewer" onclick="closeInvoiceViewer()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
+
+      <!-- Printable Invoice Layout -->
+      <div id="printable-invoice-content" style="font-family: inherit; color: #0F172A;">
+        
+        <!-- Top Invoice Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 1.25rem; margin-bottom: 1.5rem;">
+          <div>
+            <h2 style="font-size: 1.6rem; font-weight: 900; color: #0F172A; margin: 0 0 0.25rem;">FAKTURA</h2>
+            <span style="font-size: 0.85rem; color: #64748B;"><span id="ivw-seller-name-header">Servida AS</span> • Org.nr <span id="ivw-seller-org-header">932 847 192 MVA</span></span>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 1.25rem; font-weight: 800; font-family: monospace; color: #0F172A;" id="ivw-invoice-num">FAKT-2026-001</div>
+            <div id="ivw-status-badge" style="font-size: 0.75rem; font-weight: 700; color: #DC2626;">⏳ Utestående</div>
+          </div>
+        </div>
+
+        <!-- Sender and Customer Details Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; font-size: 0.88rem; line-height: 1.6;">
+          <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <strong style="color: #64748B; font-size: 0.78rem; text-transform: uppercase;">Selger / Utsteder:</strong>
+              <button type="button" onclick="openCompanySettingsModal()" style="background: none; border: none; font-size: 0.72rem; color: #2563EB; font-weight: 700; cursor: pointer; text-decoration: underline;">✏️ Endre</button>
+            </div>
+            <strong id="ivw-seller-company">Servida AS</strong><br>
+            <span id="ivw-seller-address">Fjellveien 1, 5014 Bergen</span><br>
+            E-post: <span id="ivw-seller-email">faktura@servida.no</span><br>
+            Telefon: <span id="ivw-seller-phone">55 12 34 56</span><br>
+            Bankkonto: <strong id="ivw-seller-account">3624.12.98765</strong>
+          </div>
+
+          <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem;">
+            <strong style="color: #64748B; font-size: 0.78rem; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">Kunde / Fakturaadresse:</strong>
+            <strong id="ivw-customer-name" style="font-size: 1rem; color: #0F172A;">Ole Christian Hansen</strong><br>
+            <span id="ivw-customer-address">Fjellveien 14, 5014 Bergen</span><br>
+            E-post: <span id="ivw-customer-email">ole.hansen@example.no</span><br>
+            Telefon: <span id="ivw-customer-phone">987 65 432</span>
+          </div>
+        </div>
+
+        <!-- Invoice Dates and KID Bar -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; background: #F1F5F9; padding: 0.85rem; border-radius: 8px; font-size: 0.82rem;">
+          <div>
+            <span style="color: #64748B; display: block;">Fakturadato:</span>
+            <strong id="ivw-invoice-date">2026-08-10</strong>
+          </div>
+          <div>
+            <span style="color: #64748B; display: block;">Forfallsdato:</span>
+            <strong id="ivw-due-date" style="color: #DC2626;">2026-08-24</strong>
+          </div>
+          <div>
+            <span style="color: #64748B; display: block;">KID-nummer:</span>
+            <strong id="ivw-kid-num" style="font-family: monospace;">202600192</strong>
+          </div>
+          <div>
+            <span style="color: #64748B; display: block;">Betalingsmåte:</span>
+            <strong id="ivw-payment-method">Bankgiro / KID</strong>
+          </div>
+        </div>
+
+        <!-- Line Items Table -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.88rem;">
+          <thead>
+            <tr style="border-bottom: 2px solid #0F172A; text-align: left;">
+              <th style="padding: 0.6rem 0.25rem;">Beskrivelse</th>
+              <th style="padding: 0.6rem 0.25rem; text-align: center; width: 60px;">Ant.</th>
+              <th style="padding: 0.6rem 0.25rem; text-align: right; width: 110px;">Netto (kr)</th>
+              <th style="padding: 0.6rem 0.25rem; text-align: center; width: 80px;">MVA %</th>
+              <th style="padding: 0.6rem 0.25rem; text-align: right; width: 110px;">Sum (kr)</th>
+            </tr>
+          </thead>
+          <tbody id="ivw-lines-tbody">
+            <!-- Line items injected here -->
+          </tbody>
+        </table>
+
+        <!-- Totals & Payment Giro Box -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start;">
+          <div style="border: 1px dashed var(--admin-border); border-radius: 8px; padding: 1rem; font-size: 0.82rem; color: #475569;">
+            <strong style="color: #0F172A; display: block; margin-bottom: 0.25rem;">Betalingsinformasjon:</strong>
+            Vennligst benytt KID-nummer <strong id="ivw-giro-kid" style="font-family: monospace; color: #0F172A;">202600192</strong> ved betaling i nettbank.<br>
+            Innbetales til konto: <strong style="font-family: monospace; color: #0F172A;">3624.12.98765</strong><br>
+            <p id="ivw-notes" style="margin: 0.5rem 0 0; font-style: italic;">Faktura for utført montering. 14 dagers betalingsfrist.</p>
+          </div>
+
+          <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 8px; padding: 1rem; font-size: 0.88rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+              <span>Netto grunnlag:</span>
+              <strong id="ivw-subtotal-net">kr 0,-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.6rem; color: #475569;">
+              <span>Utgående MVA (25%):</span>
+              <strong id="ivw-vat-total">kr 0,-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 2px solid #0F172A; padding-top: 0.6rem; font-size: 1.15rem; font-weight: 900; color: #0F172A;">
+              <span>Å betale:</span>
+              <span id="ivw-total-gross">kr 0,-</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Action Toolbar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--admin-border); padding-top: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" onclick="window.print()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.6rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+            🖨️ Skriv ut / Lagre som PDF
+          </button>
+          <button type="button" id="btn-ivw-send-email" onclick="sendActiveInvoiceEmail()" style="background: #0F172A; color: white; border: none; padding: 0.6rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+            ✉️ Send e-post til kunde
+          </button>
+          <button type="button" onclick="openCompanySettingsModal()" style="background: #F8FAFC; color: #475569; border: 1px solid var(--admin-border); padding: 0.6rem 0.95rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+            ⚙️ Firmaprofil
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" id="btn-ivw-mark-paid" onclick="markActiveInvoicePaid()" style="background: #059669; color: white; border: none; padding: 0.6rem 1.15rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+            ✅ Registrer innbetaling
+          </button>
+          <button type="button" onclick="closeInvoiceViewer()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.6rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+            Lukk
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL: COMPANY & SELLER SETTINGS (FIRMAPROFIL & FAKTURAINNSTILLINGER)
+       ========================================================================== -->
+  <div class="admin-modal-overlay" id="modal-company-settings" style="display: none;" role="dialog" aria-modal="true" aria-hidden="true">
+    <div style="background: white; border-radius: 16px; width: 100%; max-width: 640px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); position: relative; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+      <button type="button" id="btn-close-company-settings" onclick="closeCompanySettingsModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #F1F5F9; border: none; width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0F172A;">✕</button>
+
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+        <span style="font-size: 1.5rem;">🏢</span>
+        <h3 style="font-size: 1.3rem; font-weight: 800; color: #0F172A; margin: 0;">
+          Firmaprofil & Selgeropplysninger
+        </h3>
+      </div>
+      <p style="color: #64748B; font-size: 0.85rem; margin-bottom: 1.25rem;">
+        Disse opplysningene vises som selger / utsteder på alle fakturaer, arbeidskontrakter og i e-poster til kunder.
+      </p>
+
+      <form id="form-company-settings" onsubmit="return false;">
+        <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Firmanavn / Selger *</label>
+            <input type="text" id="cs-company-name" required placeholder="F.eks. Servida AS" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.9rem; font-weight: 700;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Org.nummer (med MVA) *</label>
+            <input type="text" id="cs-org-number" required placeholder="F.eks. 932 847 192 MVA" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem; font-family: monospace;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Forretningsadresse / Besøksadresse *</label>
+          <input type="text" id="cs-address" required placeholder="F.eks. Fjellveien 1, 5014 Bergen" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Postnummer</label>
+            <input type="text" id="cs-post-code" value="5014" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Poststed / By</label>
+            <input type="text" id="cs-city" value="Bergen" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Telefonnummer *</label>
+            <input type="text" id="cs-phone" required placeholder="55 12 34 56" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Faktura E-post (Kopimottaker) *</label>
+            <input type="email" id="cs-invoice-email" required placeholder="faktura@servida.no" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Generell Kundeservice E-post</label>
+            <input type="email" id="cs-support-email" value="post@servida.no" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.88rem;">
+          </div>
+        </div>
+
+        <!-- Payment Bank Account Section -->
+        <div style="background: #F8FAFC; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem;">
+          <h4 style="margin: 0 0 0.65rem; font-size: 0.85rem; font-weight: 800; color: #0F172A;">🏦 Betaling & Bankoppgjør</h4>
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 0.75rem;">
+            <div>
+              <label style="font-size: 0.75rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Norsk Bankkontonummer (KID) *</label>
+              <input type="text" id="cs-bank-account" required placeholder="3624.12.98765" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.9rem; font-weight: 800; font-family: monospace; color: #0F172A;">
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">IBAN (Valgfritt)</label>
+              <input type="text" id="cs-iban" placeholder="NO93 3624 1298 765" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.82rem; font-family: monospace;">
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Standard Forfallsfrist</label>
+              <select id="cs-due-days" style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.5rem; font-size: 0.85rem; font-weight: 700;">
+                <option value="7">7 dager</option>
+                <option value="10">10 dager</option>
+                <option value="14" selected>14 dager (Standard)</option>
+                <option value="21">21 dager</option>
+                <option value="30">30 dager</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.25rem;">Standard fakturatekst / Bunntekst</label>
+          <input type="text" id="cs-footer-note" value="Takk for at du valgte Servida AS! Faktura for utført arbeid iht. avtale." style="width: 100%; height: 38px; border-radius: 6px; border: 1px solid var(--admin-border); padding: 0 0.6rem; font-size: 0.85rem;">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--admin-border); padding-top: 1rem;">
+          <button type="button" onclick="closeCompanySettingsModal()" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.65rem 1.15rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer;">
+            Avbryt
+          </button>
+          <button type="submit" id="btn-submit-company-settings" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.4rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+            💾 Lagre Bedriftsopplysninger
           </button>
         </div>
       </form>

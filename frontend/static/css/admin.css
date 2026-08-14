@@ -649,18 +649,14 @@ body.admin-body {
   background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(6px);
   z-index: 10000;
-  display: none !important;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  pointer-events: none;
 }
 
 .admin-modal-overlay.active {
   display: flex !important;
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
 }
 
 /* Employee Management & Handyman Profile Styles */
@@ -829,10 +825,152 @@ body.admin-body {
   border: 2px solid white;
 }
 
+/* Month Calendar Grid Styles */
+.month-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--admin-border);
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.month-cal-header-cell {
+  background: #F8FAFC;
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.month-cal-day-cell {
+  background: #FFFFFF;
+  min-height: 120px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  transition: background 150ms ease, box-shadow 150ms ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.month-cal-day-cell:hover {
+  background: #F8FAFC;
+}
+
+.month-cal-day-cell.other-month {
+  background: #F8FAFC;
+  opacity: 0.45;
+  cursor: default;
+}
+
+.month-cal-day-cell.is-today {
+  background: #EFF6FF;
+  border: 2px solid #3B82F6 !important;
+  z-index: 2;
+}
+
+.month-cal-day-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.month-day-number {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #0F172A;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.month-cal-day-cell.is-today .month-day-number {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+.month-day-jobs-badge {
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: #E2E8F0;
+  color: #334155;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+}
+
+.month-cal-job-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+  transition: transform 100ms ease, box-shadow 100ms ease;
+  cursor: pointer;
+}
+
+.month-cal-job-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.pill-lars {
+  background: #DCFCE7;
+  color: #166534;
+  border-color: #BBF7D0;
+}
+
+.pill-erik {
+  background: #EFF6FF;
+  color: #1E40AF;
+  border-color: #BFDBFE;
+}
+
+.pill-magnus {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #FDE68A;
+}
+
+.pill-thomas {
+  background: #F3E8FF;
+  color: #6B21A8;
+  border-color: #E9D5FF;
+}
+
+.pill-unassigned {
+  background: #FEE2E2;
+  color: #991B1B;
+  border-color: #FECACA;
+  font-weight: 700;
+}
+
+.pill-general {
+  background: #F1F5F9;
+  color: #334155;
+  border-color: #E2E8F0;
+}
+
 @media (max-width: 1024px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .kanban-board { grid-template-columns: 1fr 1fr; }
   .employee-grid { grid-template-columns: 1fr; }
+  .month-calendar-grid { font-size: 0.75rem; }
 }
 
 @media (max-width: 768px) {

@@ -260,9 +260,200 @@ function renderTable() {
   });
 }
 
-// 5. Interactive Dispatch Calendar & Vaktliste Matrix
+// 5. Interactive Month & Day Dispatch Calendar Matrix
+let currentCalMode = "month";
+let currentCalYear = 2026;
+let currentCalMonth = 8;
 let currentCalendarDate = new Date().toISOString().split('T')[0];
 
+function switchCalMode(mode) {
+  currentCalMode = mode;
+  const btnMonth = document.getElementById("btn-cal-mode-month");
+  const btnDay = document.getElementById("btn-cal-mode-day");
+  const wrapMonth = document.getElementById("cal-month-view-wrap");
+  const wrapDay = document.getElementById("cal-day-view-wrap");
+
+  if (mode === "month") {
+    if (btnMonth) {
+      btnMonth.classList.add("active");
+      btnMonth.style.background = "#0F172A";
+      btnMonth.style.color = "white";
+      btnMonth.style.fontWeight = "700";
+    }
+    if (btnDay) {
+      btnDay.classList.remove("active");
+      btnDay.style.background = "transparent";
+      btnDay.style.color = "#475569";
+      btnDay.style.fontWeight = "600";
+    }
+    if (wrapMonth) wrapMonth.style.display = "block";
+    if (wrapDay) wrapDay.style.display = "none";
+    loadMonthCalendar();
+  } else {
+    if (btnDay) {
+      btnDay.classList.add("active");
+      btnDay.style.background = "#0F172A";
+      btnDay.style.color = "white";
+      btnDay.style.fontWeight = "700";
+    }
+    if (btnMonth) {
+      btnMonth.classList.remove("active");
+      btnMonth.style.background = "transparent";
+      btnMonth.style.color = "#475569";
+      btnMonth.style.fontWeight = "600";
+    }
+    if (wrapMonth) wrapMonth.style.display = "none";
+    if (wrapDay) wrapDay.style.display = "block";
+    loadCalendarDispatch();
+  }
+}
+
+// 5A. Full Month-View Calendar
+async function loadMonthCalendar() {
+  const gridContainer = document.getElementById("cal-month-grid");
+  if (!gridContainer) return;
+  gridContainer.innerHTML = "<div style='grid-column: 1 / -1; text-align: center; color: #64748B; padding: 3rem;'>Laster inn månedsoversikt...</div>";
+
+  const isAdmin = currentStaffUser && currentStaffUser.role === "admin";
+  const handymanSelect = document.getElementById("cal-month-handyman-filter");
+  const statusSelect = document.getElementById("cal-month-status-filter");
+
+  if (!isAdmin) {
+    if (handymanSelect) handymanSelect.style.display = "none";
+  } else {
+    if (handymanSelect) handymanSelect.style.display = "";
+  }
+
+  // Populate Handyman dropdown if needed
+  if (isAdmin && handymanSelect && handymanSelect.children.length <= 1) {
+    try {
+      const eRes = await fetch("/api/employees");
+      const eData = await eRes.json();
+      const hList = (eData.employees || []).filter(x => x.role === "handyman");
+      hList.forEach(h => {
+        const opt = document.createElement("option");
+        opt.value = h.full_name;
+        opt.textContent = `👷 ${h.full_name} (${h.handyman_specialty || 'Handyman'})`;
+        handymanSelect.appendChild(opt);
+      });
+    } catch(e) {}
+  }
+
+  const selectedHandymanFilter = isAdmin ? (handymanSelect ? handymanSelect.value : "alle") : currentStaffUser.full_name;
+  const selectedStatusFilter = statusSelect ? statusSelect.value : "alle";
+
+  try {
+    const params = new URLSearchParams();
+    params.append("year", currentCalYear);
+    params.append("month", currentCalMonth);
+    if (selectedHandymanFilter && selectedHandymanFilter !== "alle") params.append("handyman", selectedHandymanFilter);
+    if (selectedStatusFilter && selectedStatusFilter !== "alle") params.append("status", selectedStatusFilter);
+
+    const res = await fetch(`/api/calendar/month?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error("Kunne ikke hente månedskalender");
+
+    // Update Header & KPI cards
+    const monthTitleElem = document.getElementById("cal-month-title");
+    const kpiJobsElem = document.getElementById("cal-month-kpi-jobs");
+    const kpiRevElem = document.getElementById("cal-month-kpi-rev");
+    const kpiUnassignedElem = document.getElementById("cal-month-kpi-unassigned");
+
+    if (monthTitleElem) monthTitleElem.textContent = data.month_name;
+    if (kpiJobsElem) kpiJobsElem.textContent = `${data.total_month_jobs} oppdrag`;
+    if (kpiRevElem) kpiRevElem.textContent = formatNOK(data.total_month_revenue);
+    if (kpiUnassignedElem) {
+      kpiUnassignedElem.textContent = `${data.total_unassigned_jobs} ubesatte`;
+      kpiUnassignedElem.style.color = data.total_unassigned_jobs > 0 ? "#DC2626" : "#059669";
+    }
+
+    // Build 7-column calendar grid
+    let html = `
+      <div class="month-cal-header-cell">Man</div>
+      <div class="month-cal-header-cell">Tir</div>
+      <div class="month-cal-header-cell">Ons</div>
+      <div class="month-cal-header-cell">Tor</div>
+      <div class="month-cal-header-cell">Fre</div>
+      <div class="month-cal-header-cell" style="color: #64748B;">Lør</div>
+      <div class="month-cal-header-cell" style="color: #64748B;">Søn</div>
+    `;
+
+    (data.days_grid || []).forEach(day => {
+      const isOtherMonth = !day.is_current_month;
+      const isToday = day.is_today;
+      const dayJobs = day.jobs || [];
+
+      let cellClasses = "month-cal-day-cell";
+      if (isOtherMonth) cellClasses += " other-month";
+      if (isToday) cellClasses += " is-today";
+
+      let jobsHtml = "";
+      const displayJobs = dayJobs.slice(0, 3);
+      displayJobs.forEach(j => {
+        let pillClass = "pill-general";
+        let prefixIcon = "👤";
+        const hName = j.assigned_handyman || "";
+
+        if (j.is_unassigned) {
+          pillClass = "pill-unassigned";
+          prefixIcon = "🚨";
+        } else if (hName.includes("Lars")) {
+          pillClass = "pill-lars";
+          prefixIcon = "👷";
+        } else if (hName.includes("Erik")) {
+          pillClass = "pill-erik";
+          prefixIcon = "⚡";
+        } else if (hName.includes("Magnus")) {
+          pillClass = "pill-magnus";
+          prefixIcon = "🔧";
+        } else if (hName.includes("Thomas")) {
+          pillClass = "pill-thomas";
+          prefixIcon = "⏱️";
+        }
+
+        const shortHandyman = j.is_unassigned ? "Ubesatt" : (hName.split(" ")[0]);
+        const shortTime = j.time_slot ? j.time_slot.split(" - ")[0] : "";
+
+        jobsHtml += `
+          <div class="month-cal-job-pill ${pillClass}" onclick="event.stopPropagation(); openOrderDrawer(${j.id});" title="${j.order_number}: ${j.service_title} - ${j.customer_name} (${j.street_address}) • ${j.time_slot} • ${formatNOK(j.total_price)}">
+            <span>${prefixIcon} <strong>${shortTime}</strong> ${j.service_title} (${shortHandyman})</span>
+          </div>
+        `;
+      });
+
+      if (dayJobs.length > 3) {
+        jobsHtml += `
+          <div style="font-size: 0.72rem; font-weight: 700; color: #2563EB; margin-top: 0.15rem; text-align: center;">
+            + ${dayJobs.length - 3} flere →
+          </div>
+        `;
+      }
+
+      html += `
+        <div class="${cellClasses}" ${!isOtherMonth ? `onclick="goToDayDispatch('${day.date}')"` : ''}>
+          <div class="month-cal-day-top">
+            <span class="month-day-number">${day.day_number}</span>
+            ${day.jobs_count > 0 ? `<span class="month-day-jobs-badge">${day.jobs_count} ${day.jobs_count === 1 ? 'oppdrag' : 'oppdrag'}</span>` : ''}
+          </div>
+          <div style="display: flex; flex-direction: column; flex: 1;">
+            ${jobsHtml}
+          </div>
+        </div>
+      `;
+    });
+
+    gridContainer.innerHTML = html;
+  } catch (err) {
+    gridContainer.innerHTML = `<div style="grid-column: 1 / -1; color: #DC2626; padding: 2rem;">Feil: ${err.message}</div>`;
+  }
+}
+
+function goToDayDispatch(dateStr) {
+  currentCalendarDate = dateStr;
+  switchCalMode("day");
+}
+
+// 5B. Daily Dispatch Calendar & Vaktliste Matrix
 async function loadCalendarDispatch() {
   const matrixContainer = document.getElementById("calendar-dispatch-matrix");
   if (!matrixContainer) return;
@@ -513,6 +704,56 @@ if (calHandymanFilter) {
   });
 }
 
+// Month Calendar Controls & Navigation Listeners
+const btnCalModeMonth = document.getElementById("btn-cal-mode-month");
+const btnCalModeDay = document.getElementById("btn-cal-mode-day");
+const btnCalPrevMonth = document.getElementById("btn-cal-prev-month");
+const btnCalNextMonth = document.getElementById("btn-cal-next-month");
+const btnCalCurrentMonth = document.getElementById("btn-cal-current-month");
+const calMonthHandymanFilter = document.getElementById("cal-month-handyman-filter");
+const calMonthStatusFilter = document.getElementById("cal-month-status-filter");
+
+if (btnCalModeMonth) {
+  btnCalModeMonth.addEventListener("click", () => switchCalMode("month"));
+}
+if (btnCalModeDay) {
+  btnCalModeDay.addEventListener("click", () => switchCalMode("day"));
+}
+if (btnCalPrevMonth) {
+  btnCalPrevMonth.addEventListener("click", () => {
+    currentCalMonth--;
+    if (currentCalMonth < 1) {
+      currentCalMonth = 12;
+      currentCalYear--;
+    }
+    loadMonthCalendar();
+  });
+}
+if (btnCalNextMonth) {
+  btnCalNextMonth.addEventListener("click", () => {
+    currentCalMonth++;
+    if (currentCalMonth > 12) {
+      currentCalMonth = 1;
+      currentCalYear++;
+    }
+    loadMonthCalendar();
+  });
+}
+if (btnCalCurrentMonth) {
+  btnCalCurrentMonth.addEventListener("click", () => {
+    const now = new Date();
+    currentCalYear = now.getFullYear();
+    currentCalMonth = now.getMonth() + 1;
+    loadMonthCalendar();
+  });
+}
+if (calMonthHandymanFilter) {
+  calMonthHandymanFilter.addEventListener("change", () => loadMonthCalendar());
+}
+if (calMonthStatusFilter) {
+  calMonthStatusFilter.addEventListener("change", () => loadMonthCalendar());
+}
+
 // 6. Open Order Detail Drawer
 async function openOrderDrawer(orderId) {
   try {
@@ -742,15 +983,20 @@ document.querySelectorAll(".admin-nav-item[data-view]").forEach(btn => {
     document.getElementById("view-docs").style.display = currentView === "docs" ? "block" : "none";
     document.getElementById("view-employees").style.display = currentView === "employees" ? "block" : "none";
     document.getElementById("view-accounting").style.display = currentView === "accounting" ? "block" : "none";
+    document.getElementById("view-invoices").style.display = currentView === "invoices" ? "block" : "none";
     document.getElementById("view-my-profile").style.display = currentView === "my-profile" ? "block" : "none";
     document.getElementById("view-email").style.display = currentView === "email" ? "block" : "none";
     document.getElementById("view-stats").style.display = currentView === "stats" ? "block" : "none";
     
     if (currentView === "services") loadServicesCMS();
-    if (currentView === "calendar") loadCalendarDispatch();
+    if (currentView === "calendar") {
+      if (currentCalMode === "month") loadMonthCalendar();
+      else loadCalendarDispatch();
+    }
     if (currentView === "docs") loadPdfDocs();
     if (currentView === "employees") loadEmployees();
     if (currentView === "accounting") loadAccountingSummary();
+    if (currentView === "invoices") loadInvoices();
     if (currentView === "my-profile") loadHandymanProfile();
     if (currentView === "email") loadEmails();
   });
@@ -1713,6 +1959,7 @@ async function loadHandymanProfile(empId = null) {
 }
 
 // Handyman quick log hours form submit handler
+const formHandymanLogHours = document.getElementById("form-handyman-log-hours");
 if (formHandymanLogHours) {
   formHandymanLogHours.addEventListener("submit", async () => {
     const targetId = selectedHandymanId || currentStaffUser.id;
@@ -1959,6 +2206,19 @@ if (formEditEmployee) {
   });
 }
 
+// Global functions exposed to window for inline onclick attributes
+window.switchCalMode = switchCalMode;
+window.loadMonthCalendar = loadMonthCalendar;
+window.loadCalendarDispatch = loadCalendarDispatch;
+window.goToDayDispatch = goToDayDispatch;
+window.openOrderDrawer = openOrderDrawer;
+window.closeEditEmployeeModal = closeEditEmployeeModal;
+window.openEditEmployeeModal = openEditEmployeeModal;
+window.openEditEmployeeModalById = openEditEmployeeModalById;
+window.openHandymanProfileView = openHandymanProfileView;
+window.openAdminLogHoursModal = openAdminLogHoursModal;
+window.closeAdminLogHoursModal = closeAdminLogHoursModal;
+
 
 // ==========================================================================
 // 14. ACCOUNTING, P&L, EXPENSES & EMPLOYMENT CONTRACTS CONTROLLER
@@ -2101,25 +2361,63 @@ function renderExpensesTable(expensesList) {
       <td style="color: #059669; font-weight: 600;">${formatNOK(x.vat_amount)}</td>
       <td style="font-size: 0.8rem; color: #64748B;">${x.notes || '-'}</td>
       <td>
-        <button class="btn-primary-sm btn-delete-expense" data-id="${x.id}" title="Slett bilag" style="background: none; border: 1px solid #FECACA; color: #DC2626; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.78rem; cursor: pointer;">
+        <button type="button" class="btn-primary-sm btn-delete-expense" onclick="deleteExpense(${x.id})" title="Slett bilag" style="background: none; border: 1px solid #FECACA; color: #DC2626; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.78rem; cursor: pointer;">
           🗑️
         </button>
       </td>
     </tr>
   `).join("");
+}
 
-  document.querySelectorAll(".btn-delete-expense").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Er du sikker på at du vil slette dette utgiftsbilaget fra regnskapet?")) return;
-      const expId = btn.dataset.id;
-      try {
-        await fetch(`/api/expenses/${expId}`, { method: "DELETE" });
-        loadAccountingSummary();
-      } catch(e) {
-        alert("Feil ved sletting: " + e.message);
-      }
-    });
+async function deleteExpense(expId) {
+  if (!confirm("Er du sikker på at du vil slette dette utgiftsbilaget fra regnskapet?")) return;
+  try {
+    const res = await fetch(`/api/expenses/${expId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Kunne ikke slette bilag.");
+    alert("✓ Utgiften er slettet fra regnskapet.");
+    loadAccountingSummary();
+  } catch(e) {
+    alert("Feil ved sletting: " + e.message);
+  }
+}
+
+function exportAccountingCSV() {
+  if (!currentAccountingData) {
+    alert("Regnskapsdata laster... Vennligst prøv igjen om et øyeblikk.");
+    return;
+  }
+  const exp = currentAccountingData.expenses ? currentAccountingData.expenses.recent_list || [] : [];
+  const pay = currentAccountingData.payroll ? currentAccountingData.payroll.employees_breakdown || [] : [];
+  const rev = currentAccountingData.revenue || {};
+  const prof = currentAccountingData.profit || {};
+
+  let csv = "SERVIDA AS - RESULTATREGNSKAP & BILAGSEKSPORT\n";
+  csv += `Eksportert dato;${new Date().toLocaleDateString('no-NO')} ${new Date().toLocaleTimeString('no-NO')}\n`;
+  csv += `Netto omsetning;${rev.net || 0} NOK\n`;
+  csv += `Påløpt lønnskostnad (YTD);${currentAccountingData.payroll ? currentAccountingData.payroll.total_payroll_cost : 0} NOK\n`;
+  csv += `Driftsutgifter;${currentAccountingData.expenses ? currentAccountingData.expenses.net : 0} NOK\n`;
+  csv += `Netto driftsresultat;${prof.net_profit || 0} NOK (Margin: ${prof.profit_margin_pct || 0}%)\n\n`;
+
+  csv += "--- UTGIFTER OG BILAG ---\n";
+  csv += "Dato;Tittel;Leverandør;Kategori;Brutto (NOK);MVA-sats;Netto (NOK);MVA-beløp (NOK);Notat\n";
+  exp.forEach(x => {
+    csv += `"${x.expense_date}";"${x.title}";"${x.vendor}";"${x.category}";${x.amount_gross};${x.vat_rate}%;${x.amount_net};${x.vat_amount};"${x.notes || ''}"\n`;
   });
+
+  csv += "\n--- LØNNSAVREGNING & FISCAL ÅRSTOTALER ---\n";
+  csv += "Håndverker;Stillingsprosent;Normtid uke;Loggede timer;Timesats;Påløpt Bruttolønn;AGA (14.1%);Total lønnskostnad YTD;Fiscal Helårskostnad\n";
+  pay.forEach(p => {
+    csv += `"${p.full_name}";"${p.employment_percentage}%";${p.target_weekly_hours}t;${p.hours_worked}t;${p.hourly_rate} kr/t;${p.gross_wage} kr;${p.aga_tax} kr;${p.total_cost} kr;${p.fiscal_year_annual_total_cost} kr\n`;
+  });
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `Servida_Regnskap_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 // Filter listener for expenses category
@@ -2138,20 +2436,22 @@ const btnOpenCreateExpense = document.getElementById("btn-open-create-expense");
 const btnCloseCreateExpense = document.getElementById("btn-close-create-expense");
 const formCreateExpense = document.getElementById("form-create-expense");
 
+function openCreateExpenseModal() {
+  const modal = document.getElementById("modal-create-expense");
+  if (modal) {
+    modal.style.display = "flex";
+    modal.classList.add("active");
+    document.getElementById("new-exp-title").value = "";
+    document.getElementById("new-exp-vendor").value = "";
+    document.getElementById("new-exp-amount").value = "";
+    document.getElementById("new-exp-notes").value = "";
+    document.getElementById("new-exp-date").value = new Date().toISOString().split('T')[0];
+    setTimeout(() => document.getElementById("new-exp-title").focus(), 150);
+  }
+}
+
 if (btnOpenCreateExpense) {
-  btnOpenCreateExpense.addEventListener("click", () => {
-    const modal = document.getElementById("modal-create-expense");
-    if (modal) {
-      modal.style.display = "flex";
-      modal.classList.add("active");
-      document.getElementById("new-exp-title").value = "";
-      document.getElementById("new-exp-vendor").value = "";
-      document.getElementById("new-exp-amount").value = "";
-      document.getElementById("new-exp-notes").value = "";
-      document.getElementById("new-exp-date").value = new Date().toISOString().split('T')[0];
-      setTimeout(() => document.getElementById("new-exp-title").focus(), 150);
-    }
-  });
+  btnOpenCreateExpense.addEventListener("click", openCreateExpenseModal);
 }
 
 function closeCreateExpenseModal() {
@@ -2569,13 +2869,16 @@ async function openEmailDetail(emailId) {
       </div>
 
       <!-- Email Body Container -->
-      <div style="background: white; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1.5rem; flex: 1; overflow-y: auto; line-height: 1.6; font-size: 0.92rem; color: #1E293B;">
-        ${em.body_html || em.body_text.replace(/\n/g, '<br>')}
+      <div style="background: white; border-1px: solid var(--admin-border); border-radius: 10px; padding: 1.5rem; flex: 1; overflow-y: auto; line-height: 1.6; font-size: 0.92rem; color: #1E293B;">
+        ${em.body_html || (em.body_text ? em.body_text.replace(/\n/g, '<br>') : '')}
       </div>
     `;
 
-    // Re-render list item to mark read
-    loadEmails(activeEmailFolder, activeEmailCategory);
+    // Visually update the active card border in list
+    document.querySelectorAll(".email-item-card").forEach(card => {
+      card.style.background = "#F8FAFC";
+      card.style.borderColor = "#E2E8F0";
+    });
   } catch (err) {
     viewer.innerHTML = `<div style="color: #DC2626; padding: 2rem;">Feil: ${err.message}</div>`;
   }
@@ -2843,36 +3146,53 @@ if (formEmailSettings) {
   });
 }
 
-// Folder & Category Button Listeners
-document.querySelectorAll(".email-folder-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".email-folder-btn").forEach(b => {
+// Folder & Category Switch Functions
+function switchEmailFolder(folder) {
+  activeEmailFolder = folder;
+  document.querySelectorAll(".email-folder-btn").forEach(b => {
+    if (b.dataset.folder === folder) {
+      b.classList.add("active");
+      b.style.background = "#F1F5F9";
+      b.style.color = "#0F172A";
+      b.style.fontWeight = "700";
+    } else {
       b.classList.remove("active");
       b.style.background = "transparent";
       b.style.color = "#475569";
-    });
-    btn.classList.add("active");
-    btn.style.background = "#F1F5F9";
-    btn.style.color = "#0F172A";
+      b.style.fontWeight = "600";
+    }
+  });
+  loadEmails(folder, activeEmailCategory);
+}
 
-    const folder = btn.dataset.folder;
-    loadEmails(folder, activeEmailCategory);
+function filterEmailCategory(cat) {
+  activeEmailCategory = cat;
+  document.querySelectorAll(".email-cat-btn").forEach(b => {
+    if (b.dataset.cat === cat) {
+      b.classList.add("active");
+      b.style.background = "#F8FAFC";
+      b.style.color = "#0F172A";
+      b.style.fontWeight = "700";
+    } else {
+      b.classList.remove("active");
+      b.style.background = "transparent";
+      b.style.color = "#475569";
+      b.style.fontWeight = "600";
+    }
+  });
+  loadEmails(activeEmailFolder, cat);
+}
+
+// Folder & Category Button Listeners
+document.querySelectorAll(".email-folder-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    switchEmailFolder(btn.dataset.folder);
   });
 });
 
 document.querySelectorAll(".email-cat-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".email-cat-btn").forEach(b => {
-      b.classList.remove("active");
-      b.style.background = "transparent";
-      b.style.color = "#475569";
-    });
-    btn.classList.add("active");
-    btn.style.background = "#F8FAFC";
-    btn.style.color = "#0F172A";
-
-    const cat = btn.dataset.cat;
-    loadEmails(activeEmailFolder, cat);
+    filterEmailCategory(btn.dataset.cat);
   });
 });
 
@@ -2900,6 +3220,784 @@ if (btnCloseComposeModal) btnCloseComposeModal.addEventListener("click", closeCo
 if (btnCancelCompose) btnCancelCompose.addEventListener("click", closeComposeEmailModal);
 const btnRefreshEmails = document.getElementById("btn-refresh-emails");
 if (btnRefreshEmails) btnRefreshEmails.addEventListener("click", () => loadEmails());
+
+// ==========================================================================
+// 16. INVOICE SYSTEM & PAYMENT TRACKING CONTROLLER
+// ==========================================================================
+
+let allInvoicesCache = [];
+let activeInvoiceFilter = "Alle";
+let activeInvoiceDetail = null;
+
+async function loadInvoices(status = activeInvoiceFilter, search = "") {
+  activeInvoiceFilter = status;
+  const tbody = document.getElementById("invoices-table-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748B; padding: 2rem;">Laster inn fakturaer...</td></tr>`;
+
+  try {
+    const params = new URLSearchParams();
+    if (status && status !== "Alle") params.append("status", status);
+    if (search) params.append("search", search);
+
+    const res = await fetch(`/api/invoices?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error("Kunne ikke hente fakturaer.");
+
+    allInvoicesCache = data.invoices || [];
+    const stats = data.stats || {};
+
+    // Update KPI Cards
+    const unpaidSumElem = document.getElementById("inv-kpi-unpaid-sum");
+    const unpaidCountElem = document.getElementById("inv-kpi-unpaid-count");
+    const paidSumElem = document.getElementById("inv-kpi-paid-sum");
+    const paidCountElem = document.getElementById("inv-kpi-paid-count");
+    const overdueSumElem = document.getElementById("inv-kpi-overdue-sum");
+    const overdueCountElem = document.getElementById("inv-kpi-overdue-count");
+    const badgeUnpaid = document.getElementById("badge-unpaid-invoices");
+
+    if (unpaidSumElem) unpaidSumElem.textContent = formatNOK(stats.total_unpaid || 0);
+    if (unpaidCountElem) unpaidCountElem.textContent = `${stats.unpaid_count || 0} fakturaer venter på betaling`;
+    if (paidSumElem) paidSumElem.textContent = formatNOK(stats.total_paid || 0);
+    if (paidCountElem) paidCountElem.textContent = `${stats.paid_count || 0} innbetalte fakturaer`;
+    if (overdueSumElem) overdueSumElem.textContent = formatNOK(stats.total_overdue || 0);
+    if (overdueCountElem) overdueCountElem.textContent = `${stats.overdue_count || 0} forfalte (Purring klargjort)`;
+    if (badgeUnpaid) {
+      badgeUnpaid.textContent = stats.unpaid_count || 0;
+      badgeUnpaid.style.display = (stats.unpaid_count > 0) ? "inline-block" : "none";
+    }
+
+    renderInvoicesTable(allInvoicesCache);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #DC2626; padding: 2rem;">Feil ved lasting: ${err.message}</td></tr>`;
+  }
+}
+
+function renderInvoicesTable(invoices) {
+  const tbody = document.getElementById("invoices-table-tbody");
+  if (!tbody) return;
+
+  if (invoices.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748B; padding: 2rem;">Ingen fakturaer funnet i denne visningen.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = invoices.map(inv => {
+    let statusBadge = "";
+    if (inv.status === "Betalt") {
+      statusBadge = `<span style="background: #DCFCE7; color: #166534; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.78rem;">✓ Betalt</span>`;
+    } else if (inv.status === "Forfalt") {
+      statusBadge = `<span style="background: #FEE2E2; color: #991B1B; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.78rem;">🔴 Forfalt</span>`;
+    } else if (inv.status === "Purring sendt") {
+      statusBadge = `<span style="background: #FEF3C7; color: #92400E; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.78rem;">⚠️ Purret</span>`;
+    } else {
+      statusBadge = `<span style="background: #F1F5F9; color: #0F172A; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.78rem;">⏳ Utestående</span>`;
+    }
+
+    return `
+      <tr>
+        <td><strong style="font-family: monospace; color: #0F172A; font-size: 0.9rem;">${inv.invoice_number}</strong></td>
+        <td>
+          <strong style="color: #0F172A; display: block;">${inv.customer_name}</strong>
+          <span style="font-size: 0.75rem; color: #64748B;">${inv.customer_email}</span>
+        </td>
+        <td><span style="color: #475569; font-size: 0.82rem;">${inv.invoice_date}</span></td>
+        <td><span style="color: ${inv.status === 'Forfalt' ? '#DC2626' : '#475569'}; font-weight: 700; font-size: 0.82rem;">${inv.due_date}</span></td>
+        <td><strong style="color: #0F172A; font-size: 0.95rem;">${formatNOK(inv.total_gross)}</strong></td>
+        <td><span style="font-size: 0.8rem; color: #64748B;">Netto: ${formatNOK(inv.subtotal_net)} (MVA ${formatNOK(inv.vat_total)})</span></td>
+        <td><span style="font-family: monospace; font-size: 0.82rem; color: #475569;">${inv.kid_number || '-'}</span></td>
+        <td>${statusBadge}</td>
+        <td>
+          <div style="display: flex; gap: 0.35rem;">
+            <button type="button" class="btn-primary-sm" onclick="openInvoiceViewer(${inv.id})" style="background: #0F172A; color: white; border: none; padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+              👁️ Vis / PDF
+            </button>
+            <button type="button" class="btn-primary-sm" onclick="sendInvoiceEmailDirect(${inv.id})" title="Send e-post til kunde" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.35rem 0.55rem; border-radius: 6px; font-size: 0.78rem; cursor: pointer;">
+              ✉️
+            </button>
+            ${inv.status !== 'Betalt' ? `
+              <button type="button" class="btn-primary-sm" onclick="quickMarkInvoicePaid(${inv.id})" title="Registrer innbetaling" style="background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0; padding: 0.35rem 0.55rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+                ✓
+              </button>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function filterInvoicesByStatus(status) {
+  document.querySelectorAll(".inv-filter-btn").forEach(btn => {
+    if (btn.dataset.status === status) {
+      btn.classList.add("active");
+      btn.style.background = "#0F172A";
+      btn.style.color = "white";
+    } else {
+      btn.classList.remove("active");
+      btn.style.background = "white";
+      btn.style.color = "#475569";
+    }
+  });
+  const search = document.getElementById("inv-search-input") ? document.getElementById("inv-search-input").value : "";
+  loadInvoices(status, search);
+}
+
+function handleInvoiceSearch(query) {
+  loadInvoices(activeInvoiceFilter, query);
+}
+
+// Open Invoice Viewer Modal
+async function openInvoiceViewer(invoiceId) {
+  const modal = document.getElementById("modal-invoice-viewer");
+  if (!modal) return;
+
+  modal.style.display = "flex";
+  modal.classList.add("active");
+
+  try {
+    const res = await fetch(`/api/invoices/${invoiceId}`);
+    const inv = data.invoice;
+    const cs = data.company_settings || cachedCompanySettings || {
+      company_name: "Servida AS",
+      org_number: "932 847 192 MVA",
+      address: "Fjellveien 1, 5014 Bergen",
+      invoice_email: "faktura@servida.no",
+      phone: "55 12 34 56",
+      bank_account: inv.account_number || "3624.12.98765"
+    };
+    activeInvoiceDetail = inv;
+
+    document.getElementById("ivw-invoice-num").textContent = inv.invoice_number;
+    const statusBadge = document.getElementById("ivw-status-badge");
+    if (statusBadge) {
+      statusBadge.textContent = inv.status === 'Betalt' ? '✓ Betalt' : (inv.status === 'Forfalt' ? '🔴 Forfalt' : '⏳ Utestående');
+      statusBadge.style.color = inv.status === 'Betalt' ? '#166534' : (inv.status === 'Forfalt' ? '#991B1B' : '#DC2626');
+    }
+
+    // Dynamic Seller Information
+    if (document.getElementById("ivw-seller-name-header")) document.getElementById("ivw-seller-name-header").textContent = cs.company_name || "Servida AS";
+    if (document.getElementById("ivw-seller-org-header")) document.getElementById("ivw-seller-org-header").textContent = cs.org_number || "932 847 192 MVA";
+    if (document.getElementById("ivw-seller-company")) document.getElementById("ivw-seller-company").textContent = cs.company_name || "Servida AS";
+    if (document.getElementById("ivw-seller-address")) document.getElementById("ivw-seller-address").textContent = cs.address || "Fjellveien 1, 5014 Bergen";
+    if (document.getElementById("ivw-seller-email")) document.getElementById("ivw-seller-email").textContent = cs.invoice_email || "faktura@servida.no";
+    if (document.getElementById("ivw-seller-phone")) document.getElementById("ivw-seller-phone").textContent = cs.phone || "55 12 34 56";
+    if (document.getElementById("ivw-seller-account")) document.getElementById("ivw-seller-account").textContent = cs.bank_account || inv.account_number || "3624.12.98765";
+
+    // Customer Information
+    document.getElementById("ivw-customer-name").textContent = inv.customer_name;
+    document.getElementById("ivw-customer-address").textContent = inv.customer_address || "Ingen adresse spesifisert";
+    document.getElementById("ivw-customer-email").textContent = inv.customer_email;
+    document.getElementById("ivw-customer-phone").textContent = inv.customer_phone || '-';
+
+    document.getElementById("ivw-invoice-date").textContent = inv.invoice_date;
+    document.getElementById("ivw-due-date").textContent = inv.due_date;
+    document.getElementById("ivw-kid-num").textContent = inv.kid_number || '-';
+    document.getElementById("ivw-payment-method").textContent = inv.payment_method || 'Bankgiro / KID';
+
+    // Lines
+    const linesTbody = document.getElementById("ivw-lines-tbody");
+    linesTbody.innerHTML = (inv.line_items || []).map(li => `
+      <tr style="border-bottom: 1px solid var(--admin-border);">
+        <td style="padding: 0.6rem 0.25rem;"><strong>${li.description}</strong></td>
+        <td style="padding: 0.6rem 0.25rem; text-align: center;">${li.quantity}</td>
+        <td style="padding: 0.6rem 0.25rem; text-align: right;">${formatNOK(li.unit_price)}</td>
+        <td style="padding: 0.6rem 0.25rem; text-align: center;">${li.vat_rate}%</td>
+        <td style="padding: 0.6rem 0.25rem; text-align: right;"><strong>${formatNOK(li.amount)}</strong></td>
+      </tr>
+    `).join("");
+
+    document.getElementById("ivw-giro-kid").textContent = inv.kid_number || '-';
+    document.getElementById("ivw-notes").textContent = inv.notes || '14 dagers betalingsfrist.';
+    document.getElementById("ivw-subtotal-net").textContent = formatNOK(inv.subtotal_net);
+    document.getElementById("ivw-vat-total").textContent = formatNOK(inv.vat_total);
+    document.getElementById("ivw-total-gross").textContent = formatNOK(inv.total_gross);
+
+    const btnPaid = document.getElementById("btn-ivw-mark-paid");
+    if (btnPaid) {
+      btnPaid.style.display = inv.status === 'Betalt' ? 'none' : 'flex';
+    }
+  } catch (err) {
+    alert("Feil ved åpning av faktura: " + err.message);
+  }
+}
+
+function closeInvoiceViewer() {
+  const modal = document.getElementById("modal-invoice-viewer");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("active");
+  }
+}
+
+async function markActiveInvoicePaid() {
+  if (!activeInvoiceDetail) return;
+  if (!confirm(`Vil du registrere ${activeInvoiceDetail.invoice_number} som innbetalt?`)) return;
+
+  try {
+    const res = await fetch(`/api/invoices/${activeInvoiceDetail.id}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "Betalt" })
+    });
+    if (!res.ok) throw new Error("Kunne ikke oppdatere betalingsstatus.");
+    alert("✓ Innbetaling registrert! Status er satt til Betalt.");
+    closeInvoiceViewer();
+    loadInvoices();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function quickMarkInvoicePaid(invoiceId) {
+  if (!confirm("Registrere innbetaling for denne fakturaen?")) return;
+  try {
+    const res = await fetch(`/api/invoices/${invoiceId}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "Betalt" })
+    });
+    if (!res.ok) throw new Error("Kunne ikke registrere innbetaling.");
+    alert("✓ Faktura er merket som betalt!");
+    loadInvoices();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function sendActiveInvoiceEmail() {
+  if (!activeInvoiceDetail) return;
+  const btn = document.getElementById("btn-ivw-send-email");
+  if (btn) { btn.disabled = true; btn.textContent = "Sender..."; }
+
+  try {
+    const res = await fetch(`/api/invoices/${activeInvoiceDetail.id}/send-email`, {
+      method: "POST"
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Kunne ikke sende faktura.");
+    alert(`✓ ${data.message}`);
+  } catch (err) {
+    alert("Feil ved sending: " + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "✉️ Send e-post til kunde"; }
+  }
+}
+
+async function sendInvoiceEmailDirect(invoiceId) {
+  try {
+    const res = await fetch(`/api/invoices/${invoiceId}/send-email`, {
+      method: "POST"
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Kunne ikke sende faktura.");
+    alert(`✓ ${data.message}`);
+  } catch (err) {
+    alert("Feil ved sending: " + err.message);
+  }
+}
+
+// Create Invoice Modal Controller
+function openCreateInvoiceModal(prefillData = null) {
+  const modal = document.getElementById("modal-create-invoice");
+  if (!modal) return;
+
+  const now = new Date();
+  const due = new Date();
+  due.setDate(now.getDate() + 14);
+
+  document.getElementById("inv-create-order-id").value = prefillData ? prefillData.order_id || "" : "";
+  document.getElementById("inv-create-customer-name").value = prefillData ? prefillData.customer_name || "" : "";
+  document.getElementById("inv-create-customer-email").value = prefillData ? prefillData.customer_email || "" : "";
+  document.getElementById("inv-create-customer-phone").value = prefillData ? prefillData.customer_phone || "" : "";
+  document.getElementById("inv-create-customer-address").value = prefillData ? prefillData.customer_address || "" : "";
+  document.getElementById("inv-create-customer-org").value = prefillData ? prefillData.customer_org_nr || "" : "";
+  document.getElementById("inv-create-date").value = prefillData ? prefillData.invoice_date : now.toISOString().split('T')[0];
+  document.getElementById("inv-create-due-date").value = prefillData ? prefillData.due_date : due.toISOString().split('T')[0];
+  document.getElementById("inv-create-account").value = prefillData ? prefillData.account_number || "3624.12.98765" : (cachedCompanySettings ? cachedCompanySettings.bank_account : "3624.12.98765");
+  document.getElementById("inv-create-notes").value = prefillData ? prefillData.notes : (cachedCompanySettings ? cachedCompanySettings.invoice_footer_note : "Faktura for utført håndverkertjeneste. 14 dagers betalingsfrist. Takk for at du valgte Servida!");
+
+  const tbody = document.getElementById("inv-create-lines-tbody");
+  tbody.innerHTML = "";
+
+  if (prefillData && prefillData.line_items && prefillData.line_items.length > 0) {
+    prefillData.line_items.forEach(li => {
+      addInvoiceLineItemRow(li.description, li.quantity, li.unit_price, li.vat_rate || 25);
+    });
+  } else {
+    addInvoiceLineItemRow("Montering / Utført håndverkertjeneste", 1, 1490, 25);
+  }
+
+  calcInvoiceModalTotals();
+
+  modal.style.display = "flex";
+  modal.classList.add("active");
+  setTimeout(() => document.getElementById("inv-create-customer-name").focus(), 150);
+}
+
+function closeCreateInvoiceModal() {
+  const modal = document.getElementById("modal-create-invoice");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("active");
+  }
+}
+
+async function openCreateInvoiceForOrder(orderId) {
+  if (!orderId) {
+    openCreateInvoiceModal();
+    return;
+  }
+  try {
+    const res = await fetch(`/api/invoices/from-order/${orderId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error("Kunne ikke hente ordredata.");
+    openCreateInvoiceModal(data);
+  } catch (err) {
+    alert("Feil: " + err.message);
+  }
+}
+
+function addInvoiceLineItemRow(desc = "", qty = 1, unitPrice = 0, vatRate = 25) {
+  const tbody = document.getElementById("inv-create-lines-tbody");
+  if (!tbody) return;
+
+  const tr = document.createElement("tr");
+  tr.style.borderBottom = "1px solid var(--admin-border)";
+  tr.innerHTML = `
+    <td style="padding: 0.4rem 0.5rem;">
+      <input type="text" class="inv-line-desc" value="${desc}" placeholder="Beskrivelse av vare/tjeneste" required style="width: 100%; height: 34px; border: 1px solid var(--admin-border); border-radius: 4px; padding: 0 0.5rem; font-size: 0.85rem;">
+    </td>
+    <td style="padding: 0.4rem 0.25rem;">
+      <input type="number" class="inv-line-qty" value="${qty}" step="0.5" min="0.5" oninput="calcInvoiceModalTotals()" style="width: 100%; height: 34px; border: 1px solid var(--admin-border); border-radius: 4px; padding: 0 0.3rem; text-align: center; font-size: 0.85rem;">
+    </td>
+    <td style="padding: 0.4rem 0.25rem;">
+      <input type="number" class="inv-line-price" value="${unitPrice}" step="1" min="0" oninput="calcInvoiceModalTotals()" style="width: 100%; height: 34px; border: 1px solid var(--admin-border); border-radius: 4px; padding: 0 0.4rem; text-align: right; font-size: 0.85rem; font-weight: 700;">
+    </td>
+    <td style="padding: 0.4rem 0.25rem; text-align: center;">
+      <select class="inv-line-vat" onchange="calcInvoiceModalTotals()" style="height: 34px; border: 1px solid var(--admin-border); border-radius: 4px; padding: 0 0.25rem; font-size: 0.82rem;">
+        <option value="25.0" ${vatRate === 25 ? 'selected' : ''}>25%</option>
+        <option value="15.0" ${vatRate === 15 ? 'selected' : ''}>15%</option>
+        <option value="0.0" ${vatRate === 0 ? 'selected' : ''}>0%</option>
+      </select>
+    </td>
+    <td style="padding: 0.4rem 0.5rem; text-align: right;">
+      <strong class="inv-line-sum" style="color: #0F172A; font-size: 0.88rem;">${formatNOK(qty * unitPrice)}</strong>
+    </td>
+    <td style="padding: 0.4rem 0.25rem; text-align: center;">
+      <button type="button" onclick="removeInvoiceLineItemRow(this)" style="background: none; border: none; color: #DC2626; cursor: pointer; font-size: 1rem;">✕</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  calcInvoiceModalTotals();
+}
+
+function removeInvoiceLineItemRow(btn) {
+  const tr = btn.closest("tr");
+  if (tr) tr.remove();
+  calcInvoiceModalTotals();
+}
+
+function calcInvoiceModalTotals() {
+  const rows = document.querySelectorAll("#inv-create-lines-tbody tr");
+  let subtotalNet = 0;
+
+  rows.forEach(tr => {
+    const qty = parseFloat(tr.querySelector(".inv-line-qty")?.value) || 0;
+    const price = parseFloat(tr.querySelector(".inv-line-price")?.value) || 0;
+    const lineSum = qty * price;
+    subtotalNet += lineSum;
+
+    const sumElem = tr.querySelector(".inv-line-sum");
+    if (sumElem) sumElem.textContent = formatNOK(lineSum);
+  });
+
+  const vatTotal = roundNumber(subtotalNet * 0.25, 2);
+  const totalGross = roundNumber(subtotalNet + vatTotal, 2);
+
+  const calcNetElem = document.getElementById("inv-calc-net");
+  const calcVatElem = document.getElementById("inv-calc-vat");
+  const calcGrossElem = document.getElementById("inv-calc-gross");
+
+  if (calcNetElem) calcNetElem.textContent = formatNOK(subtotalNet);
+  if (calcVatElem) calcVatElem.textContent = formatNOK(vatTotal);
+  if (calcGrossElem) calcGrossElem.textContent = formatNOK(totalGross);
+}
+
+function roundNumber(num, scale) {
+  if (!("" + num).includes("e")) {
+    return +(Math.round(num + "e+" + scale) + "e-" + scale);
+  } else {
+    var arr = ("" + num).split("e");
+    var sig = "";
+    if (+arr[1] + scale > 0) {
+      sig = "+";
+    }
+    return +(Math.round(+arr[0] + "e" + sig + (+arr[1] + scale)) + "e-" + scale);
+  }
+}
+
+// Form Submit Handler for Creating Invoices
+const formCreateInvoice = document.getElementById("form-create-invoice");
+if (formCreateInvoice) {
+  formCreateInvoice.addEventListener("submit", async () => {
+    const order_id = parseInt(document.getElementById("inv-create-order-id").value) || null;
+    const customer_name = document.getElementById("inv-create-customer-name").value.trim();
+    const customer_email = document.getElementById("inv-create-customer-email").value.trim();
+    const customer_phone = document.getElementById("inv-create-customer-phone").value.trim();
+    const customer_address = document.getElementById("inv-create-customer-address").value.trim();
+    const customer_org_nr = document.getElementById("inv-create-customer-org").value.trim();
+    const invoice_date = document.getElementById("inv-create-date").value;
+    const due_date = document.getElementById("inv-create-due-date").value;
+    const account_number = document.getElementById("inv-create-account").value;
+    const notes = document.getElementById("inv-create-notes").value.trim();
+
+    // Collect line items
+    const lineItems = [];
+    document.querySelectorAll("#inv-create-lines-tbody tr").forEach(tr => {
+      const desc = tr.querySelector(".inv-line-desc")?.value.trim();
+      const qty = parseFloat(tr.querySelector(".inv-line-qty")?.value) || 1;
+      const price = parseFloat(tr.querySelector(".inv-line-price")?.value) || 0;
+      const vat = parseFloat(tr.querySelector(".inv-line-vat")?.value) || 25;
+      if (desc) {
+        lineItems.push({
+          description: desc,
+          quantity: qty,
+          unit_price: price,
+          vat_rate: vat,
+          amount: qty * price
+        });
+      }
+    });
+
+    if (lineItems.length === 0) {
+      alert("Vennligst legg til minst én fakturalinje.");
+      return;
+    }
+
+    const btnSub = document.getElementById("btn-submit-create-invoice");
+    btnSub.disabled = true;
+    btnSub.textContent = "Oppretter...";
+
+    try {
+      const res = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id,
+          customer_name,
+          customer_email,
+          customer_phone,
+          customer_address,
+          customer_org_nr,
+          invoice_date,
+          due_date,
+          account_number,
+          line_items: lineItems,
+          notes
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Kunne ikke opprette faktura.");
+
+      alert(`✓ ${data.message}`);
+      closeCreateInvoiceModal();
+      loadInvoices();
+    } catch (err) {
+      alert("Feil: " + err.message);
+    } finally {
+      btnSub.disabled = false;
+      btnSub.textContent = "💾 Opprett & Send Faktura";
+    }
+  });
+}
+
+function exportInvoicesCSV() {
+  if (!allInvoicesCache || allInvoicesCache.length === 0) {
+    alert("Ingen fakturaer å eksportere.");
+    return;
+  }
+
+  let csv = "SERVIDA AS - FAKTURASYSTEM & JOURNAL\n";
+  csv += `Eksportert dato;${new Date().toLocaleDateString('no-NO')} ${new Date().toLocaleTimeString('no-NO')}\n\n`;
+  csv += "Fakturanr;Kunde;E-post;Telefon;Fakturadato;Forfallsdato;Netto (NOK);MVA (NOK);Brutto (NOK);KID;Status\n";
+
+  allInvoicesCache.forEach(i => {
+    csv += `"${i.invoice_number}";"${i.customer_name}";"${i.customer_email}";"${i.customer_phone || ''}";"${i.invoice_date}";"${i.due_date}";${i.subtotal_net};${i.vat_total};${i.total_gross};"${i.kid_number || ''}";"${i.status}"\n`;
+  });
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `Servida_Fakturajournal_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+
+// ==========================================================================
+// GLOBAL WINDOW EXPORTS (For robust inline onclick triggers)
+// ==========================================================================
+window.switchCalMode = switchCalMode;
+window.loadMonthCalendar = loadMonthCalendar;
+window.loadCalendarDispatch = loadCalendarDispatch;
+window.goToDayDispatch = goToDayDispatch;
+window.openOrderDrawer = openOrderDrawer;
+window.closeOrderDrawer = closeOrderDrawer;
+window.openEditEmployeeModal = openEditEmployeeModal;
+window.openEditEmployeeModalById = openEditEmployeeModalById;
+window.closeEditEmployeeModal = closeEditEmployeeModal;
+window.openAdminLogHoursModal = openAdminLogHoursModal;
+window.closeAdminLogHoursModal = closeAdminLogHoursModal;
+window.openContractViewer = openContractViewer;
+window.closeContractViewer = closeContractViewer;
+window.openCreateEmployeeModal = () => {
+  const modal = document.getElementById("modal-create-employee");
+  if (modal) {
+    modal.style.display = "flex";
+    modal.classList.add("active");
+    document.getElementById("new-emp-name").value = "";
+    document.getElementById("new-emp-phone").value = "";
+    document.getElementById("new-emp-email").value = "";
+    document.getElementById("new-emp-password").value = "";
+    document.getElementById("new-emp-specialty").value = "";
+    document.getElementById("new-emp-bio").value = "";
+    document.getElementById("create-emp-error-msg").style.display = "none";
+    setTimeout(() => document.getElementById("new-emp-name").focus(), 150);
+  }
+};
+window.closeCreateEmployeeModal = closeCreateEmployeeModal;
+window.openCreateExpenseModal = openCreateExpenseModal;
+window.closeCreateExpenseModal = closeCreateExpenseModal;
+window.exportAccountingCSV = exportAccountingCSV;
+window.deleteExpense = deleteExpense;
+window.openHandymanProfileView = openHandymanProfileView;
+window.openComposeEmailModal = openComposeEmailModal;
+window.closeComposeEmailModal = closeComposeEmailModal;
+window.saveServicePrice = saveServicePrice;
+window.openPdfViewerModal = openPdfViewerModal;
+window.closePdfViewerModal = closePdfViewerModal;
+
+// Invoices exports
+window.loadInvoices = loadInvoices;
+window.filterInvoicesByStatus = filterInvoicesByStatus;
+window.handleInvoiceSearch = handleInvoiceSearch;
+window.openInvoiceViewer = openInvoiceViewer;
+window.closeInvoiceViewer = closeInvoiceViewer;
+window.markActiveInvoicePaid = markActiveInvoicePaid;
+window.quickMarkInvoicePaid = quickMarkInvoicePaid;
+window.sendActiveInvoiceEmail = sendActiveInvoiceEmail;
+window.sendInvoiceEmailDirect = sendInvoiceEmailDirect;
+window.openCreateInvoiceModal = openCreateInvoiceModal;
+window.closeCreateInvoiceModal = closeCreateInvoiceModal;
+window.openCreateInvoiceForOrder = openCreateInvoiceForOrder;
+window.addInvoiceLineItemRow = addInvoiceLineItemRow;
+window.removeInvoiceLineItemRow = removeInvoiceLineItemRow;
+window.calcInvoiceModalTotals = calcInvoiceModalTotals;
+window.exportInvoicesCSV = exportInvoicesCSV;
+
+// ==========================================================================
+// 17. COMPANY & SELLER SETTINGS CONTROLLER
+// ==========================================================================
+
+let cachedCompanySettings = null;
+
+async function loadCompanySettings() {
+  try {
+    const res = await fetch("/api/company-settings");
+    const data = await res.json();
+    if (res.ok && data.settings) {
+      cachedCompanySettings = data.settings;
+      return cachedCompanySettings;
+    }
+  } catch (err) {
+    console.error("Kunne ikke laste bedriftsinnstillinger:", err);
+  }
+  return null;
+}
+
+async function openCompanySettingsModal() {
+  const modal = document.getElementById("modal-company-settings");
+  if (!modal) return;
+
+  const settings = await loadCompanySettings() || {
+    company_name: "Servida AS",
+    org_number: "932 847 192 MVA",
+    address: "Fjellveien 1, 5014 Bergen",
+    post_code: "5014",
+    city: "Bergen",
+    invoice_email: "faktura@servida.no",
+    support_email: "post@servida.no",
+    phone: "55 12 34 56",
+    bank_account: "3624.12.98765",
+    iban: "NO93 3624 1298 765",
+    swift_bic: "DNBANOKK",
+    default_due_days: 14,
+    invoice_footer_note: "Takk for at du valgte Servida AS! Faktura for utført arbeid iht. avtale."
+  };
+
+  document.getElementById("cs-company-name").value = settings.company_name || "";
+  document.getElementById("cs-org-number").value = settings.org_number || "";
+  document.getElementById("cs-address").value = settings.address || "";
+  document.getElementById("cs-post-code").value = settings.post_code || "";
+  document.getElementById("cs-city").value = settings.city || "";
+  document.getElementById("cs-invoice-email").value = settings.invoice_email || "";
+  document.getElementById("cs-support-email").value = settings.support_email || "";
+  document.getElementById("cs-phone").value = settings.phone || "";
+  document.getElementById("cs-bank-account").value = settings.bank_account || "";
+  document.getElementById("cs-iban").value = settings.iban || "";
+  document.getElementById("cs-due-days").value = settings.default_due_days || 14;
+  document.getElementById("cs-footer-note").value = settings.invoice_footer_note || "";
+
+  modal.style.display = "flex";
+  modal.classList.add("active");
+  setTimeout(() => document.getElementById("cs-company-name").focus(), 150);
+}
+
+function closeCompanySettingsModal() {
+  const modal = document.getElementById("modal-company-settings");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("active");
+  }
+}
+
+const formCompanySettings = document.getElementById("form-company-settings");
+if (formCompanySettings) {
+  formCompanySettings.addEventListener("submit", async () => {
+    const payload = {
+      company_name: document.getElementById("cs-company-name").value.trim(),
+      org_number: document.getElementById("cs-org-number").value.trim(),
+      address: document.getElementById("cs-address").value.trim(),
+      post_code: document.getElementById("cs-post-code").value.trim(),
+      city: document.getElementById("cs-city").value.trim(),
+      invoice_email: document.getElementById("cs-invoice-email").value.trim(),
+      support_email: document.getElementById("cs-support-email").value.trim(),
+      phone: document.getElementById("cs-phone").value.trim(),
+      bank_account: document.getElementById("cs-bank-account").value.trim(),
+      iban: document.getElementById("cs-iban").value.trim(),
+      default_due_days: parseInt(document.getElementById("cs-due-days").value) || 14,
+      invoice_footer_note: document.getElementById("cs-footer-note").value.trim()
+    };
+
+    const btnSub = document.getElementById("btn-submit-company-settings");
+    btnSub.disabled = true;
+    btnSub.textContent = "Lagrer...";
+
+    try {
+      const res = await fetch("/api/company-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Kunne ikke lagre bedriftsopplysninger.");
+
+      cachedCompanySettings = payload;
+      alert("✓ Bedriftsprofil og fakturainnstillinger er oppdatert!");
+      closeCompanySettingsModal();
+
+      // Update active viewer if open
+      if (document.getElementById("ivw-seller-name-header")) {
+        document.getElementById("ivw-seller-name-header").textContent = payload.company_name;
+        document.getElementById("ivw-seller-org-header").textContent = payload.org_number;
+        document.getElementById("ivw-seller-company").textContent = payload.company_name;
+        document.getElementById("ivw-seller-address").textContent = payload.address;
+        document.getElementById("ivw-seller-email").textContent = payload.invoice_email;
+        document.getElementById("ivw-seller-phone").textContent = payload.phone;
+        document.getElementById("ivw-seller-account").textContent = payload.bank_account;
+      }
+    } catch (err) {
+      alert("Feil: " + err.message);
+    } finally {
+      btnSub.disabled = false;
+      btnSub.textContent = "💾 Lagre Bedriftsopplysninger";
+    }
+  });
+}
+
+// ==========================================================================
+// GLOBAL WINDOW EXPORTS (For robust inline onclick triggers)
+// ==========================================================================
+window.switchCalMode = switchCalMode;
+window.loadMonthCalendar = loadMonthCalendar;
+window.loadCalendarDispatch = loadCalendarDispatch;
+window.goToDayDispatch = goToDayDispatch;
+window.openOrderDrawer = openOrderDrawer;
+window.closeOrderDrawer = closeOrderDrawer;
+window.openEditEmployeeModal = openEditEmployeeModal;
+window.openEditEmployeeModalById = openEditEmployeeModalById;
+window.closeEditEmployeeModal = closeEditEmployeeModal;
+window.openAdminLogHoursModal = openAdminLogHoursModal;
+window.closeAdminLogHoursModal = closeAdminLogHoursModal;
+window.openContractViewer = openContractViewer;
+window.closeContractViewer = closeContractViewer;
+window.openCreateEmployeeModal = () => {
+  const modal = document.getElementById("modal-create-employee");
+  if (modal) {
+    modal.style.display = "flex";
+    modal.classList.add("active");
+    document.getElementById("new-emp-name").value = "";
+    document.getElementById("new-emp-phone").value = "";
+    document.getElementById("new-emp-email").value = "";
+    document.getElementById("new-emp-password").value = "";
+    document.getElementById("new-emp-specialty").value = "";
+    document.getElementById("new-emp-bio").value = "";
+    document.getElementById("create-emp-error-msg").style.display = "none";
+    setTimeout(() => document.getElementById("new-emp-name").focus(), 150);
+  }
+};
+window.closeCreateEmployeeModal = closeCreateEmployeeModal;
+window.openCreateExpenseModal = openCreateExpenseModal;
+window.closeCreateExpenseModal = closeCreateExpenseModal;
+window.exportAccountingCSV = exportAccountingCSV;
+window.deleteExpense = deleteExpense;
+window.openHandymanProfileView = openHandymanProfileView;
+window.openComposeEmailModal = openComposeEmailModal;
+window.closeComposeEmailModal = closeComposeEmailModal;
+window.saveServicePrice = saveServicePrice;
+window.openPdfViewerModal = openPdfViewerModal;
+window.closePdfViewerModal = closePdfViewerModal;
+
+// Invoices exports
+window.loadInvoices = loadInvoices;
+window.filterInvoicesByStatus = filterInvoicesByStatus;
+window.handleInvoiceSearch = handleInvoiceSearch;
+window.openInvoiceViewer = openInvoiceViewer;
+window.closeInvoiceViewer = closeInvoiceViewer;
+window.markActiveInvoicePaid = markActiveInvoicePaid;
+window.quickMarkInvoicePaid = quickMarkInvoicePaid;
+window.sendActiveInvoiceEmail = sendActiveInvoiceEmail;
+window.sendInvoiceEmailDirect = sendInvoiceEmailDirect;
+window.openCreateInvoiceModal = openCreateInvoiceModal;
+window.closeCreateInvoiceModal = closeCreateInvoiceModal;
+window.openCreateInvoiceForOrder = openCreateInvoiceForOrder;
+window.addInvoiceLineItemRow = addInvoiceLineItemRow;
+window.removeInvoiceLineItemRow = removeInvoiceLineItemRow;
+window.calcInvoiceModalTotals = calcInvoiceModalTotals;
+window.exportInvoicesCSV = exportInvoicesCSV;
+
+// Email hub exports
+window.openEmailDetail = openEmailDetail;
+window.replyToCurrentEmail = replyToCurrentEmail;
+window.forwardCurrentEmail = forwardCurrentEmail;
+window.deleteEmailItem = deleteEmailItem;
+window.loadEmails = loadEmails;
+window.switchEmailFolder = switchEmailFolder;
+window.filterEmailCategory = filterEmailCategory;
+window.openEmailSettingsModal = openEmailSettingsModal;
+window.closeEmailSettingsModal = closeEmailSettingsModal;
+
+// Company settings exports
+window.openCompanySettingsModal = openCompanySettingsModal;
+window.closeCompanySettingsModal = closeCompanySettingsModal;
+window.loadCompanySettings = loadCompanySettings;
+
+
+
 
 
 

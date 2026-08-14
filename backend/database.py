@@ -708,9 +708,176 @@ Servida AS"""
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (f, se, sn, re, rn, sub, b_html, b_txt, cat, st, ro, ru, is_r, is_s, c_at))
 
+    # 11. Invoices table (Fakturasenter & Betalingsoppfølging)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_number TEXT UNIQUE NOT NULL,
+        order_id INTEGER,
+        customer_name TEXT NOT NULL,
+        customer_email TEXT NOT NULL,
+        customer_phone TEXT,
+        customer_address TEXT,
+        customer_org_nr TEXT,
+        invoice_date TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        status TEXT DEFAULT 'Utestående', -- 'Utestående', 'Betalt', 'Forfalt', 'Purring sendt', 'Kreditert'
+        payment_method TEXT DEFAULT 'Faktura (Konto/KID)',
+        kid_number TEXT,
+        account_number TEXT DEFAULT '3624.12.98765',
+        subtotal_net REAL NOT NULL,
+        vat_total REAL NOT NULL,
+        total_gross REAL NOT NULL,
+        line_items TEXT NOT NULL, -- JSON array
+        notes TEXT,
+        sent_at TEXT,
+        paid_at TEXT,
+        created_at TEXT,
+        FOREIGN KEY (order_id) REFERENCES orders(id)
+    )
+    """)
+
+    # Seed Sample Invoices
+    cursor.execute("SELECT COUNT(*) FROM invoices")
+    if cursor.fetchone()[0] == 0:
+        sample_invoices = [
+            (
+                "FAKT-2026-001",
+                1,
+                "Ole Christian Hansen",
+                "ole.hansen@example.no",
+                "987 65 432",
+                "Fjellveien 14, 5014 Bergen",
+                "",
+                "2026-08-10",
+                "2026-08-24",
+                "Utestående",
+                "Faktura (Konto/KID)",
+                "202600192",
+                "3624.12.98765",
+                1992.0,
+                498.0,
+                2490.0,
+                json.dumps([
+                    {"description": "Montering av ytterdør (Fastpris)", "quantity": 1, "unit_price": 1992.0, "vat_rate": 25.0, "amount": 1992.0}
+                ]),
+                "Faktura for utført montering. Ikke betalt via Vipps på stedet. 14 dagers betalingsfrist.",
+                "2026-08-10 14:30:00",
+                None,
+                "2026-08-10 14:30:00"
+            ),
+            (
+                "FAKT-2026-002",
+                2,
+                "Kari Nordmann",
+                "kari.nordmann@example.no",
+                "415 88 920",
+                "Strandgaten 88, 5004 Bergen",
+                "",
+                "2026-07-28",
+                "2026-08-11",
+                "Betalt",
+                "Faktura (Konto/KID)",
+                "202600284",
+                "3624.12.98765",
+                4960.0,
+                1240.0,
+                6200.0,
+                json.dumps([
+                    {"description": "Montering av 4 stk innerdører", "quantity": 4, "unit_price": 1100.0, "vat_rate": 25.0, "amount": 4400.0},
+                    {"description": "Materiell: Karmskruer, kiler og skum", "quantity": 1, "unit_price": 560.0, "vat_rate": 25.0, "amount": 560.0}
+                ]),
+                "Betalt i nettbank 2026-08-05. Takk for oppdraget!",
+                "2026-07-28 10:00:00",
+                "2026-08-05 11:20:00",
+                "2026-07-28 10:00:00"
+            ),
+            (
+                "FAKT-2026-003",
+                3,
+                "Bergen Bygg & Eiendom AS",
+                "faktura@bergenbygg.no",
+                "55 99 88 77",
+                "Bryggen 5, 5003 Bergen",
+                "987 123 456 MVA",
+                "2026-07-20",
+                "2026-08-03",
+                "Forfalt",
+                "Faktura (Konto/KID)",
+                "202600376",
+                "3624.12.98765",
+                3080.0,
+                770.0,
+                3850.0,
+                json.dumps([
+                    {"description": "Elektro: Feilsøking og utskifting av termostat", "quantity": 1, "unit_price": 2400.0, "vat_rate": 25.0, "amount": 2400.0},
+                    {"description": "Smart termostat Touch V2", "quantity": 1, "unit_price": 680.0, "vat_rate": 25.0, "amount": 680.0}
+                ]),
+                "Forfalt 2026-08-03. Purring er klargjort for utsendelse.",
+                "2026-07-20 16:00:00",
+                None,
+                "2026-07-20 16:00:00"
+            )
+        ]
+        for inv in sample_invoices:
+            cursor.execute("""
+            INSERT INTO invoices (
+                invoice_number, order_id, customer_name, customer_email, customer_phone,
+                customer_address, customer_org_nr, invoice_date, due_date, status,
+                payment_method, kid_number, account_number, subtotal_net, vat_total,
+                total_gross, line_items, notes, sent_at, paid_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, inv)
+
+    # 12. Company & Seller Settings table (Fakturainnstillinger & Firmaprofil)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS company_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_name TEXT NOT NULL DEFAULT 'Servida AS',
+        org_number TEXT NOT NULL DEFAULT '932 847 192 MVA',
+        address TEXT NOT NULL DEFAULT 'Fjellveien 1, 5014 Bergen',
+        post_code TEXT DEFAULT '5014',
+        city TEXT DEFAULT 'Bergen',
+        invoice_email TEXT NOT NULL DEFAULT 'faktura@servida.no',
+        support_email TEXT NOT NULL DEFAULT 'post@servida.no',
+        phone TEXT NOT NULL DEFAULT '55 12 34 56',
+        bank_account TEXT NOT NULL DEFAULT '3624.12.98765',
+        iban TEXT DEFAULT '',
+        swift_bic TEXT DEFAULT '',
+        default_due_days INTEGER DEFAULT 14,
+        invoice_footer_note TEXT DEFAULT 'Takk for at du valgte Servida AS! Faktura for utført arbeid iht. avtale.',
+        updated_at TEXT
+    )
+    """)
+
+    cursor.execute("SELECT COUNT(*) FROM company_settings")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+        INSERT INTO company_settings (
+            company_name, org_number, address, post_code, city,
+            invoice_email, support_email, phone, bank_account,
+            iban, swift_bic, default_due_days, invoice_footer_note, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Servida AS",
+            "932 847 192 MVA",
+            "Fjellveien 1, 5014 Bergen",
+            "5014",
+            "Bergen",
+            "faktura@servida.no",
+            "post@servida.no",
+            "55 12 34 56",
+            "3624.12.98765",
+            "NO93 3624 1298 765",
+            "DNBANOKK",
+            14,
+            "Takk for at du valgte Servida AS! Faktura for utført arbeid iht. avtale.",
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+
     conn.commit()
     conn.close()
-    print("Database updated and initialized successfully with users, order status tracking, accounting expenses, employment contracts, and email service hub!")
+    print("Database updated and initialized successfully with users, order status tracking, accounting expenses, employment contracts, email service hub, invoices, and company settings!")
 
 if __name__ == "__main__":
     init_db()

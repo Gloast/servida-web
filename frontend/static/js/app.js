@@ -388,6 +388,19 @@ function openServiceModal(service) {
     if (inpPostcode) inpPostcode.value = currentUser.postal_code || "";
     if (inpCity) inpCity.value = currentUser.city || "";
   }
+
+  // Setup Date & Slot Scheduler (08:00 - 16:00 & 30m travel buffer)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  if (inpDate) {
+    inpDate.min = tomorrowStr;
+    if (!inpDate.value || inpDate.value < tomorrowStr) {
+      inpDate.value = tomorrowStr;
+    }
+  }
+  loadUpcomingAvailableDates();
+  fetchSlotAvailability(inpDate ? inpDate.value : tomorrowStr);
   
   // Populate variants
   if (modalVariantsContainer) {
@@ -645,14 +658,189 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Time Slot Card Selector
-document.querySelectorAll(".time-slot-card").forEach(card => {
-  card.addEventListener("click", () => {
-    document.querySelectorAll(".time-slot-card").forEach(c => c.classList.remove("selected"));
-    card.classList.add("selected");
-    selectedTimeSlot = card.dataset.slot;
+// ==========================================================================
+// DYNAMIC CAPACITY & TIME SLOT SCHEDULER (08:00 - 16:00 & TRAVEL BUFFER)
+// ==========================================================================
+
+async function loadUpcomingAvailableDates() {
+  const bar = document.getElementById("booking-quick-dates-bar");
+  if (!bar) return;
+  bar.innerHTML = "<span style='font-size: 0.8rem; color: var(--color-text-muted);'>Laster ledige dager...</span>";
+
+  try {
+    const handle = activeService ? activeService.handle : "";
+    const res = await fetch(`/api/booking/available-dates?days_ahead=10&service_handle=${handle}`);
+    const data = await res.json();
+    
+    bar.innerHTML = "";
+    (data.dates || []).forEach(d => {
+      const isSelected = inpDate && inpDate.value === d.date;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `booking-date-pill ${isSelected ? "active" : ""}`;
+      btn.style.cssText = `
+        padding: 0.4rem 0.75rem;
+        border-radius: 9999px;
+        border: 1px solid ${d.is_full ? '#FECACA' : (isSelected ? '#0F172A' : 'var(--color-border)')};
+        background: ${d.is_full ? '#FEF2F2' : (isSelected ? '#0F172A' : '#FFFFFF')};
+        color: ${d.is_full ? '#991B1B' : (isSelected ? '#FFFFFF' : '#0F172A')};
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: ${d.is_full ? 'not-allowed' : 'pointer'};
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        opacity: ${d.is_full ? '0.6' : '1'};
+        transition: all 150ms ease;
+      `;
+      btn.innerHTML = `<span>${d.display_label}</span> <span style="font-size: 0.7rem;">${d.is_full ? '🔒 Full' : '🟢'}</span>`;
+
+      if (!d.is_full) {
+        btn.addEventListener("click", () => {
+          if (inpDate) {
+            inpDate.value = d.date;
+            document.querySelectorAll(".booking-date-pill").forEach(p => {
+              p.classList.remove("active");
+              p.style.background = "#FFFFFF";
+              p.style.color = "#0F172A";
+              p.style.borderColor = "var(--color-border)";
+            });
+            btn.classList.add("active");
+            btn.style.background = "#0F172A";
+            btn.style.color = "#FFFFFF";
+            btn.style.borderColor = "#0F172A";
+            fetchSlotAvailability(d.date);
+          }
+        });
+      }
+      bar.appendChild(btn);
+    });
+  } catch (err) {
+    console.error("Feil ved lasting av dager:", err);
+  }
+}
+
+async function fetchSlotAvailability(targetDate) {
+  const container = document.getElementById("booking-slots-container");
+  const badge = document.getElementById("booking-day-capacity-badge");
+  if (!container) return;
+
+  container.innerHTML = "<div style='grid-column: 1 / -1; text-align: center; color: var(--color-text-muted); padding: 1.5rem;'>Sjekker håndverkerkapasitet og kjøreruter...</div>";
+  if (badge) badge.innerHTML = "🔄 Sjekker ledig kapasitet...";
+
+  try {
+    const handle = activeService ? activeService.handle : "";
+    const pCode = inpPostcode ? inpPostcode.value.trim() : "";
+    const res = await fetch(`/api/booking/availability?date=${targetDate}&service_handle=${handle}&postal_code=${pCode}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error("Kunne ikke sjekke tilgjengelighet");
+
+    // Update capacity badge
+    if (badge) {
+      if (data.is_fully_booked) {
+        badge.innerHTML = `<span style="color: #DC2626;">🔴 Fullbooket (08:00 – 16:00 er opptatt)</span>`;
+        badge.style.borderColor = "#FECACA";
+        badge.style.background = "#FEF2F2";
+      } else {
+        badge.innerHTML = `<span style="color: #059669;">🟢 Ledig kapasitet: ${data.remaining_capacity_hours}t ledig (${data.work_day_hours})</span>`;
+        badge.style.borderColor = "#BBF7D0";
+        badge.style.background = "#F0FDF4";
+      }
+    }
+
+    // Render Slots
+    container.innerHTML = "";
+    const slots = data.slots || [];
+    let hasSelected = false;
+
+    slots.forEach(slot => {
+      const isAvailable = slot.available;
+      const card = document.createElement("div");
+      
+      const isCurrentlySelected = selectedTimeSlot === slot.slot_id && isAvailable;
+      if (isCurrentlySelected) hasSelected = true;
+
+      card.className = `time-slot-card ${isCurrentlySelected ? "selected" : ""} ${!isAvailable ? "disabled" : ""}`;
+      card.dataset.slot = slot.slot_id;
+      
+      card.style.cssText = `
+        padding: 0.85rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid ${!isAvailable ? '#FECACA' : (isCurrentlySelected ? 'var(--color-primary)' : 'var(--color-border)')};
+        background: ${!isAvailable ? '#FEF2F2' : (isCurrentlySelected ? '#F8FAFC' : '#FFFFFF')};
+        opacity: ${!isAvailable ? '0.6' : '1'};
+        cursor: ${!isAvailable ? 'not-allowed' : 'pointer'};
+        transition: all 150ms ease;
+      `;
+
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
+          <strong style="font-size: 0.95rem; color: #0F172A;">${slot.title}</strong>
+          <span style="font-size: 0.72rem; font-weight: 800; padding: 0.15rem 0.45rem; border-radius: 4px; background: ${!isAvailable ? '#FEE2E2' : '#DCFCE7'}; color: ${!isAvailable ? '#991B1B' : '#166534'};">
+            ${slot.status_badge}
+          </span>
+        </div>
+        <div style="font-size: 0.84rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+          ⏰ ${slot.time_range} <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">(${slot.interval_label || ''})</span>
+        </div>
+        <div style="font-size: 0.75rem; color: #64748B;">
+          ${slot.reason}
+        </div>
+      `;
+
+      if (isAvailable) {
+        card.addEventListener("click", () => {
+          document.querySelectorAll(".time-slot-card").forEach(c => {
+            c.classList.remove("selected");
+            if (!c.classList.contains("disabled")) {
+              c.style.borderColor = "var(--color-border)";
+              c.style.background = "#FFFFFF";
+            }
+          });
+          card.classList.add("selected");
+          card.style.borderColor = "var(--color-primary)";
+          card.style.background = "#F8FAFC";
+          selectedTimeSlot = slot.slot_id;
+        });
+      }
+
+      container.appendChild(card);
+    });
+
+    // If previously selected slot is no longer available, select first available slot
+    if (!hasSelected) {
+      const firstAvail = slots.find(s => s.available);
+      if (firstAvail) {
+        selectedTimeSlot = firstAvail.slot_id;
+        const firstCard = container.querySelector(`[data-slot="${firstAvail.slot_id}"]`);
+        if (firstCard) {
+          firstCard.classList.add("selected");
+          firstCard.style.borderColor = "var(--color-primary)";
+          firstCard.style.background = "#F8FAFC";
+        }
+      } else {
+        selectedTimeSlot = null;
+      }
+    }
+
+  } catch (err) {
+    container.innerHTML = `<div style="grid-column: 1 / -1; color: #DC2626; padding: 1rem;">Feil ved sjekk av tidsrom: ${err.message}</div>`;
+  }
+}
+
+if (inpDate) {
+  inpDate.addEventListener("change", (e) => {
+    fetchSlotAvailability(e.target.value);
+    // Update active state in quick pills
+    document.querySelectorAll(".booking-date-pill").forEach(p => {
+      p.classList.remove("active");
+      p.style.background = "#FFFFFF";
+      p.style.color = "#0F172A";
+      p.style.borderColor = "var(--color-border)";
+    });
   });
-});
+}
 
 // Search and Sort Event Listeners
 if (globalSearchInput) {

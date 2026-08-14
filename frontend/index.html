@@ -238,32 +238,49 @@
             </div>
           </div>
 
-          <h4 class="form-section-title" style="margin-top: 1.5rem;">Når passer det best for deg?</h4>
+          <h4 class="form-section-title" style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <span>Når passer det best for deg?</span>
+            <span style="font-size: 0.78rem; font-weight: 600; color: #059669; background: #DCFCE7; padding: 0.2rem 0.55rem; border-radius: 9999px;">
+              ⏱️ Arbeidstid: 08:00 – 16:00
+            </span>
+          </h4>
+
+          <!-- Upcoming Days Quick Selector -->
+          <div style="margin-bottom: 1rem;">
+            <label style="font-size: 0.8rem; font-weight: 700; color: var(--color-text-muted); display: block; margin-bottom: 0.4rem;">
+              Ledige dager i kalenderen:
+            </label>
+            <div id="booking-quick-dates-bar" style="display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.4rem;">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+          </div>
+
           <div class="form-grid-2">
             <div class="input-field-wrap">
-              <label for="inp-date">Ønsket dato *</label>
+              <label for="inp-date">Valgt dato for oppmøte *</label>
               <input type="date" id="inp-date" required>
             </div>
+            
             <div class="input-field-wrap">
-              <label>Tidsrom *</label>
-              <div class="time-slot-grid" style="margin-bottom: 0;">
-                <div class="time-slot-card selected" data-slot="08:00 - 12:00">
-                  <strong>🌅 Formiddag</strong>
-                  <span>08:00 – 12:00</span>
-                </div>
-                <div class="time-slot-card" data-slot="12:00 - 16:00">
-                  <strong>☀️ Ettermiddag</strong>
-                  <span>12:00 – 16:00</span>
-                </div>
-                <div class="time-slot-card" data-slot="16:00 - 20:00">
-                  <strong>🌆 Kveld</strong>
-                  <span>16:00 – 20:00</span>
-                </div>
-                <div class="time-slot-card" data-slot="Fleksibel">
-                  <strong>🕒 Fleksibel</strong>
-                  <span>Håndverker ringer</span>
-                </div>
+              <label>Kapasitetsstatus for valgt dag</label>
+              <div id="booking-day-capacity-badge" style="background: #F8FAFC; border: 1px solid var(--color-border); border-radius: var(--radius-sm); height: 42px; display: flex; align-items: center; padding: 0 0.85rem; font-size: 0.85rem; font-weight: 700; color: #0F172A;">
+                🔄 Sjekker ledig kapasitet...
               </div>
+            </div>
+          </div>
+
+          <!-- Dynamic Time Slots Container (08:00 - 16:00 with travel buffer) -->
+          <div style="margin-top: 0.75rem;">
+            <label style="font-size: 0.85rem; font-weight: 700; color: var(--color-primary); display: block; margin-bottom: 0.4rem;">
+              Tilgjengelige tidsrom (tar høyde for oppdragslengde & 30 min kjøretid) *
+            </label>
+
+            <div class="time-slot-grid" id="booking-slots-container" style="margin-bottom: 0.75rem;">
+              <!-- Rendered dynamically by app.js based on /api/booking/availability -->
+            </div>
+
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: var(--radius-sm); padding: 0.75rem 1rem; font-size: 0.82rem; color: #166534; line-height: 1.45;">
+              🚗 <strong>Punktlighetsgaranti:</strong> Håndverkerne jobber i tidsrommet 08:00–16:00. Bookingmotoren legger automatisk inn 30 minutter kjøretidsbuffer mellom oppdrag for å sikre at håndverkeren ankommer presist til avtalt tid.
             </div>
           </div>
         </div>
