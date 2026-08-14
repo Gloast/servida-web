@@ -243,6 +243,59 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )
     """)
+
+    # 9. Email Messages table (E-postsenter & Transaksjons-e-poster)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS emails (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        folder TEXT DEFAULT 'inbox', -- 'inbox', 'sent', 'automated', 'drafts', 'trash'
+        sender_email TEXT NOT NULL,
+        sender_name TEXT NOT NULL,
+        recipient_email TEXT NOT NULL,
+        recipient_name TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body_html TEXT NOT NULL,
+        body_text TEXT,
+        category TEXT DEFAULT 'Generell', -- 'Ordrebekreftelse', 'Oppdrag', 'Faktura', 'Kontrakt', 'Kundehenvendelse', 'System', 'Generell'
+        status TEXT DEFAULT 'Sendt', -- 'Sendt', 'Levert', 'Mottatt', 'Utkast', 'Feilet'
+        related_order_id INTEGER,
+        related_user_id INTEGER,
+        is_read INTEGER DEFAULT 0,
+        is_starred INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (related_order_id) REFERENCES orders(id),
+        FOREIGN KEY (related_user_id) REFERENCES users(id)
+    )
+    """)
+
+    # 10. Email Templates table (E-postmaler for rask utsending)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS email_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_key TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        subject_template TEXT NOT NULL,
+        body_template TEXT NOT NULL
+    )
+    """)
+
+    # 11. Email Settings table (SMTP konfigurasjon og automatiske triggere)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS email_settings (
+        id INTEGER PRIMARY KEY,
+        smtp_host TEXT DEFAULT 'smtp.servida.no',
+        smtp_port INTEGER DEFAULT 587,
+        smtp_user TEXT DEFAULT 'post@servida.no',
+        smtp_password TEXT DEFAULT '',
+        sender_name TEXT DEFAULT 'Servida AS',
+        sender_email TEXT DEFAULT 'post@servida.no',
+        auto_order_confirmations INTEGER DEFAULT 1,
+        auto_handyman_dispatch INTEGER DEFAULT 1,
+        auto_completion_receipt INTEGER DEFAULT 1,
+        updated_at TEXT
+    )
+    """)
     
     conn.commit()
     
@@ -452,9 +505,212 @@ def init_db():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Signert & Aktiv')
             """, (uid, ctr_no, emp_name, pos, pct, wh, hr, s_date, prob, not_p, wp, terms, now_str))
 
+    # --- Seed Email Settings ---
+    cursor.execute("SELECT COUNT(*) FROM email_settings")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+        INSERT INTO email_settings (
+            id, smtp_host, smtp_port, smtp_user, smtp_password, sender_name, sender_email,
+            auto_order_confirmations, auto_handyman_dispatch, auto_completion_receipt, updated_at
+        ) VALUES (1, 'smtp.servida.no', 587, 'post@servida.no', '', 'Servida AS Kundesenter', 'post@servida.no', 1, 1, 1, ?)
+        """, (now_str,))
+
+    # --- Seed Email Templates ---
+    cursor.execute("SELECT COUNT(*) FROM email_templates")
+    if cursor.fetchone()[0] == 0:
+        templates_seed = [
+            (
+                "order_confirmation",
+                "Ordrebekreftelse til kunde",
+                "Ordrebekreftelse",
+                "Ordrebekreftelse #{order_number} – Servida AS",
+                """Hei {customer_name},
+
+Takk for din bestilling hos Servida AS! Vi har mottatt og bekreftet oppdraget ditt.
+
+Detaljer om bestillingen:
+• Ordrenummer: #{order_number}
+• Tjeneste: {service_title} ({variant_name})
+• Avtalt tidspunkt: {preferred_date} ({time_slot})
+• Oppmøteadresse: {street_address}, {postal_code} {city}
+• Totalpris: kr {total_price},- (inkl. 25% MVA)
+
+Tildelt fagperson vil ta kontakt eller ankomme på avtalt tid. Du kan følge oppdraget i sanntid på din brukerkonto.
+
+Med vennlig hilsen,
+Servida AS Kundeservice
+Tlf: 55 12 34 56 | post@servida.no"""
+            ),
+            (
+                "handyman_dispatch",
+                "Oppdragstildeling til håndverker",
+                "Oppdrag",
+                "Nytt oppdrag tildelt: #{order_number} – {service_title}",
+                """Hei {handyman_name},
+
+Du har blitt tildelt et nytt oppdrag i Servida-portalen.
+
+Oppdragsinformasjon:
+• Ordrenummer: #{order_number}
+• Tjeneste: {service_title} ({variant_name})
+• Kunde: {customer_name} (Tlf: {customer_phone})
+• Adresse: {street_address}, {postal_code} {city}
+• Dato & tid: {preferred_date} kl. {time_slot}
+• Kundens notater: {notes}
+
+Husk å oppdatere status til «På vei» når du starter kjøreturen, og «Pågår» når du ankommer.
+
+God vakt!
+Servida Oppdragsledelse"""
+            ),
+            (
+                "order_completed",
+                "Fullføringsrapport & Kvittering",
+                "Faktura",
+                "Ditt oppdrag #{order_number} er fullført – Servida AS",
+                """Hei {customer_name},
+
+Vi har gleden av å informere om at oppdraget #{order_number} ({service_title}) nå er ferdigstilt av {handyman_name}!
+
+Vi håper du er strålende fornøyd med resultatet og arbeidet som er utført. 
+Husk at Servida gir full kvalitetsgaranti på alle utførte oppdrag.
+
+Du kan logge inn på din profil for å laste ned ferdigattest, kvittering og gi din vurdering av håndverkeren.
+
+Takk for at du valgte Servida!
+Vennlig hilsen,
+Servida AS"""
+            ),
+            (
+                "quote_offer",
+                "Uforpliktende Pristilbud",
+                "Tilbud",
+                "Uforpliktende pristilbud fra Servida AS",
+                """Hei {customer_name},
+
+Viser til din hyggelige henvendelse. Vi har gleden av å oversende et skreddersydd pristilbud på ønsket håndverkertjeneste.
+
+Tilbudet inkluderer:
+• Fagutdannet håndverker og nødvendig spesialverktøy
+• Forskriftsmessig montering og opprydding
+• 100% fornøydgaranti og dokumentasjon
+
+Totalpris: kr {total_price},- inkl. MVA.
+
+Svar gjerne direkte på denne e-posten for å bekrefte eller avtale ønsket oppstartsdato.
+
+Med vennlig hilsen,
+Servida AS"""
+            )
+        ]
+        for key, name, cat, subj, body in templates_seed:
+            cursor.execute("""
+            INSERT INTO email_templates (template_key, name, category, subject_template, body_template)
+            VALUES (?, ?, ?, ?, ?)
+            """, (key, name, cat, subj, body))
+
+    # --- Seed Sample Email Inbox & Outbox ---
+    cursor.execute("SELECT COUNT(*) FROM emails")
+    if cursor.fetchone()[0] == 0:
+        sample_emails = [
+            (
+                "inbox",
+                "ole.hansen@example.no",
+                "Ole Christian Hansen",
+                "post@servida.no",
+                "Servida Kundeservice",
+                "Spørsmål angående montering av Yale Doorman L3",
+                """<p>Hei Servida,</p><p>Jeg lurer på om dere kan bistå med montering av Yale Doorman L3 på en eldre dør (byggeår 2005)? Må sluttstykket i karmen freses ut, eller følger det med alt som trengs?</p><p>Hilsen Ole Christian Hansen</p>""",
+                "Hei Servida, Jeg lurer på om dere kan bistå med montering av Yale Doorman L3 på en eldre dør...",
+                "Kundehenvendelse",
+                "Mottatt",
+                1,
+                5,
+                0,
+                1,
+                "2026-08-14 01:20:00"
+            ),
+            (
+                "inbox",
+                "kari.nordmann@example.no",
+                "Kari Nordmann",
+                "post@servida.no",
+                "Servida Kundeservice",
+                "Ønske om befaring for listing og innerdører",
+                """<p>Hei!</p><p>Vi skal bytte 4 innerdører i leiligheten i Strandgaten og ønsker tilbud inkludert listverk og foringer. Er det mulighet for at Lars Snekker kan komme på en kort befaring tirsdag?</p><p>Mvh Kari Nordmann, Tlf: 415 88 920</p>""",
+                "Hei! Vi skal bytte 4 innerdører i leiligheten i Strandgaten...",
+                "Kundehenvendelse",
+                "Mottatt",
+                2,
+                6,
+                0,
+                0,
+                "2026-08-13 18:45:00"
+            ),
+            (
+                "sent",
+                "post@servida.no",
+                "Servida AS Kundesenter",
+                "ole.hansen@example.no",
+                "Ole Christian Hansen",
+                "Ordrebekreftelse #SRV-1001 – Montering av innerdør",
+                """<div style="font-family: sans-serif; max-width: 600px; color: #1E293B;"><div style="background: #0F172A; color: white; padding: 1.25rem; border-radius: 8px 8px 0 0;"><h2 style="margin: 0; font-size: 1.25rem;">Servida AS – Ordrebekreftelse</h2></div><div style="border: 1px solid #E2E8F0; border-top: none; padding: 1.5rem; border-radius: 0 0 8px 8px;"><p>Hei <strong>Ole Christian Hansen</strong>,</p><p>Takk for din bestilling! Vi bekrefter herved oppdraget:</p><ul style="line-height: 1.8;"><li><strong>Ordrenummer:</strong> #SRV-1001</li><li><strong>Tjeneste:</strong> Montering av innerdør (Enkel dør)</li><li><strong>Tidspunkt:</strong> 2026-08-15 kl. 09:00 - 12:00</li><li><strong>Adresse:</strong> Fjellveien 14, 5014 Bergen</li><li><strong>Tildelt montør:</strong> Lars Snekker (👷)</li><li><strong>Totalbeløp:</strong> kr 1 890,- inkl. MVA</li></ul><p style="margin-top: 1.5rem; color: #64748B; font-size: 0.85rem;">Servida AS | Org.nr: 932 847 192 MVA | Tlf: 55 12 34 56</p></div></div>""",
+                "Hei Ole Christian Hansen, Takk for din bestilling! Vi bekrefter herved oppdraget #SRV-1001...",
+                "Ordrebekreftelse",
+                "Levert",
+                1,
+                5,
+                1,
+                1,
+                "2026-08-14 00:10:00"
+            ),
+            (
+                "sent",
+                "post@servida.no",
+                "Servida AS Drift",
+                "lars@servida.no",
+                "Lars Snekker",
+                "Nytt oppdrag tildelt: #SRV-1001 (Fjellveien 14)",
+                """<p>Hei Lars,</p><p>Du er tildelt oppdrag <strong>#SRV-1001</strong> hos Ole Christian Hansen i Fjellveien 14. Oppmøte 2026-08-15 kl. 09:00.</p><p>Husk å medbringe kile-sett, vater og karmskruer.</p>""",
+                "Hei Lars, Du er tildelt oppdrag #SRV-1001 hos Ole Christian Hansen...",
+                "Oppdrag",
+                "Levert",
+                1,
+                2,
+                1,
+                0,
+                "2026-08-14 00:12:00"
+            ),
+            (
+                "automated",
+                "system@servida.no",
+                "Servida Automatikk",
+                "admin@servida.no",
+                "Servida Administrator",
+                "Daglig oppsummering: 3 nye bestillinger og 1 ferdigstilt oppdrag",
+                """<p>Systemrapport: 3 nye bestillinger registrert i Bergen sentrum og Åsane. Alle håndverkere er i rute iht. timeplan.</p>""",
+                "Systemrapport: 3 nye bestillinger registrert i Bergen...",
+                "System",
+                "Levert",
+                None,
+                1,
+                1,
+                0,
+                "2026-08-14 01:00:00"
+            )
+        ]
+        for f, se, sn, re, rn, sub, b_html, b_txt, cat, st, ro, ru, is_r, is_s, c_at in sample_emails:
+            cursor.execute("""
+            INSERT INTO emails (
+                folder, sender_email, sender_name, recipient_email, recipient_name,
+                subject, body_html, body_text, category, status,
+                related_order_id, related_user_id, is_read, is_starred, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f, se, sn, re, rn, sub, b_html, b_txt, cat, st, ro, ru, is_r, is_s, c_at))
+
     conn.commit()
     conn.close()
-    print("Database updated and initialized successfully with users, order status tracking, accounting expenses, and employment contracts!")
+    print("Database updated and initialized successfully with users, order status tracking, accounting expenses, employment contracts, and email service hub!")
 
 if __name__ == "__main__":
     init_db()

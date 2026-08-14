@@ -743,6 +743,7 @@ document.querySelectorAll(".admin-nav-item[data-view]").forEach(btn => {
     document.getElementById("view-employees").style.display = currentView === "employees" ? "block" : "none";
     document.getElementById("view-accounting").style.display = currentView === "accounting" ? "block" : "none";
     document.getElementById("view-my-profile").style.display = currentView === "my-profile" ? "block" : "none";
+    document.getElementById("view-email").style.display = currentView === "email" ? "block" : "none";
     document.getElementById("view-stats").style.display = currentView === "stats" ? "block" : "none";
     
     if (currentView === "services") loadServicesCMS();
@@ -751,6 +752,7 @@ document.querySelectorAll(".admin-nav-item[data-view]").forEach(btn => {
     if (currentView === "employees") loadEmployees();
     if (currentView === "accounting") loadAccountingSummary();
     if (currentView === "my-profile") loadHandymanProfile();
+    if (currentView === "email") loadEmails();
   });
 });
 
@@ -2376,6 +2378,529 @@ if (btnExportSafT) {
     document.body.removeChild(link);
   });
 }
+
+
+// ==========================================================================
+// 15. EMAIL SERVICE & COMMUNICATION HUB CONTROLLER
+// ==========================================================================
+
+let activeEmailFolder = "inbox";
+let activeEmailCategory = "Alle";
+let currentSelectedEmailId = null;
+let emailTemplatesCache = [];
+
+async function loadEmails(folder = activeEmailFolder, category = activeEmailCategory, search = "") {
+  activeEmailFolder = folder;
+  activeEmailCategory = category;
+
+  const listContainer = document.getElementById("email-list-container");
+  if (!listContainer) return;
+  listContainer.innerHTML = `<div style="text-align: center; color: #64748B; padding: 2rem;">Laster inn e-poster...</div>`;
+
+  try {
+    const params = new URLSearchParams();
+    if (folder) params.append("folder", folder);
+    if (category && category !== "Alle") params.append("category", category);
+    if (search) params.append("search", search);
+
+    const res = await fetch(`/api/emails?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error("Kunne ikke hente e-poster");
+
+    // Update Counts & Badges
+    const inboxCountElem = document.getElementById("email-inbox-count");
+    const sentCountElem = document.getElementById("email-sent-count");
+    const autoCountElem = document.getElementById("email-auto-count");
+    const navBadgeElem = document.getElementById("badge-unread-emails");
+
+    if (inboxCountElem) inboxCountElem.textContent = data.unread_inbox_count || "0";
+    if (sentCountElem) sentCountElem.textContent = data.total_sent || "0";
+    if (autoCountElem) autoCountElem.textContent = data.total_automated || "0";
+    if (navBadgeElem) {
+      navBadgeElem.textContent = data.unread_inbox_count || "0";
+      navBadgeElem.style.display = data.unread_inbox_count > 0 ? "inline-block" : "none";
+    }
+
+    renderEmailList(data.emails || []);
+
+    // Auto-select first email if none selected
+    if (data.emails && data.emails.length > 0 && !currentSelectedEmailId) {
+      openEmailDetail(data.emails[0].id);
+    } else if (!data.emails || data.emails.length === 0) {
+      renderEmptyEmailViewer();
+    }
+  } catch (err) {
+    console.error("Feil ved lasting av e-poster:", err);
+  }
+}
+
+function renderEmailList(emails) {
+  const container = document.getElementById("email-list-container");
+  if (!container) return;
+
+  if (emails.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2.5rem 1rem; color: #64748B; background: #F8FAFC; border-radius: 8px; border: 1px dashed var(--admin-border);">
+        <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">📭</span>
+        <strong style="display: block; color: #0F172A;">Ingen e-poster funnet</strong>
+        <span style="font-size: 0.8rem;">Mappen er tom eller ingen e-poster matcher søket.</span>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = emails.map(em => {
+    const isSelected = em.id === currentSelectedEmailId;
+    const isUnread = em.is_read === 0;
+    const dateStr = em.created_at ? em.created_at.split(' ')[0] : '';
+    const catColor = getEmailCategoryColor(em.category);
+
+    return `
+      <div class="email-item-card" onclick="openEmailDetail(${em.id})" style="padding: 0.85rem; border-radius: 10px; border: 1px solid ${isSelected ? '#3B82F6' : (isUnread ? '#CBD5E1' : '#E2E8F0')}; background: ${isSelected ? '#EFF6FF' : (isUnread ? '#FFFFFF' : '#F8FAFC')}; cursor: pointer; transition: all 0.15s ease; box-shadow: ${isUnread ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'};">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            ${isUnread ? '<span style="width: 8px; height: 8px; border-radius: 50%; background: #2563EB; display: inline-block;"></span>' : ''}
+            <strong style="font-size: 0.88rem; color: ${isUnread ? '#0F172A' : '#475569'};">
+              ${activeEmailFolder === 'sent' ? `Til: ${em.recipient_name}` : em.sender_name}
+            </strong>
+          </div>
+          <span style="font-size: 0.72rem; color: #94A3B8;">${dateStr}</span>
+        </div>
+
+        <div style="font-size: 0.84rem; font-weight: ${isUnread ? '700' : '600'}; color: #0F172A; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${em.subject}
+        </div>
+
+        <div style="font-size: 0.78rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.45rem;">
+          ${em.body_text || em.subject}
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.68rem; font-weight: 700; background: ${catColor.bg}; color: ${catColor.text}; padding: 0.15rem 0.45rem; border-radius: 4px;">
+            ${em.category}
+          </span>
+          <span style="font-size: 0.72rem; color: #64748B;">
+            ${em.status === 'Levert' ? '✓ Levert' : em.status}
+          </span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function getEmailCategoryColor(category) {
+  switch (category) {
+    case "Ordrebekreftelse": return { bg: "#DCFCE7", text: "#166534" };
+    case "Oppdrag": return { bg: "#EFF6FF", text: "#1E40AF" };
+    case "Tilbud": return { bg: "#FEF3C7", text: "#92400E" };
+    case "Faktura": return { bg: "#FEE2E2", text: "#991B1B" };
+    case "Kundehenvendelse": return { bg: "#F3E8FF", text: "#6B21A8" };
+    case "System": return { bg: "#F1F5F9", text: "#475569" };
+    default: return { bg: "#F1F5F9", text: "#475569" };
+  }
+}
+
+async function openEmailDetail(emailId) {
+  currentSelectedEmailId = emailId;
+  const viewer = document.getElementById("email-viewer-container");
+  if (!viewer) return;
+
+  viewer.innerHTML = `<div style="text-align: center; color: #64748B; padding: 3rem;">Laster inn e-post...</div>`;
+
+  try {
+    const res = await fetch(`/api/emails/${emailId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error("Kunne ikke hente e-post");
+
+    const em = data.email;
+    const relOrder = data.related_order;
+    const catColor = getEmailCategoryColor(em.category);
+
+    viewer.innerHTML = `
+      <!-- Email Header -->
+      <div style="border-bottom: 1px solid var(--admin-border); padding-bottom: 1.25rem; margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.75rem;">
+          <h3 style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin: 0; line-height: 1.3;">
+            ${em.subject}
+          </h3>
+          <span style="font-size: 0.75rem; font-weight: 700; background: ${catColor.bg}; color: ${catColor.text}; padding: 0.2rem 0.6rem; border-radius: 6px; white-space: nowrap;">
+            ${em.category}
+          </span>
+        </div>
+
+        <!-- Sender/Recipient Metadata -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; font-size: 0.85rem;">
+          <div>
+            <div style="margin-bottom: 0.15rem;">
+              <span style="color: #64748B;">Fra:</span> <strong>${em.sender_name}</strong> &lt;${em.sender_email}&gt;
+            </div>
+            <div>
+              <span style="color: #64748B;">Til:</span> <strong>${em.recipient_name}</strong> &lt;${em.recipient_email}&gt;
+            </div>
+          </div>
+          <div style="text-align: right; color: #64748B; font-size: 0.78rem;">
+            <div>📅 ${em.created_at}</div>
+            <div style="color: #059669; font-weight: 600; margin-top: 0.15rem;">Status: ${em.status}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; background: white; border: 1px solid var(--admin-border); border-radius: 8px; padding: 0.5rem 0.75rem;">
+        <div style="display: flex; gap: 0.4rem;">
+          <button onclick="replyToCurrentEmail('${em.sender_email}', '${em.sender_name}', '${em.subject.replace(/'/g, "\\'")}', ${em.related_order_id || 'null'})" style="background: #0F172A; color: white; border: none; padding: 0.4rem 0.85rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+            ↩️ Svar
+          </button>
+          <button onclick="forwardCurrentEmail('${em.subject.replace(/'/g, "\\'")}', \`${(em.body_text || '').replace(/`/g, '\\`')}\`)" style="background: #F1F5F9; color: #0F172A; border: 1px solid var(--admin-border); padding: 0.4rem 0.75rem; border-radius: 6px; font-weight: 600; font-size: 0.8rem; cursor: pointer;">
+            ➡️ Videresend
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 0.4rem; align-items: center;">
+          ${relOrder ? `
+            <button onclick="openOrderDrawer(${relOrder.id})" style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; padding: 0.4rem 0.75rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+              📋 Åpne Ordre #${relOrder.order_number}
+            </button>
+          ` : ''}
+          <button onclick="deleteEmailItem(${em.id})" style="background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; padding: 0.4rem 0.65rem; border-radius: 6px; font-weight: 600; font-size: 0.8rem; cursor: pointer;" title="Slett e-post">
+            🗑️ Slett
+          </button>
+        </div>
+      </div>
+
+      <!-- Email Body Container -->
+      <div style="background: white; border: 1px solid var(--admin-border); border-radius: 10px; padding: 1.5rem; flex: 1; overflow-y: auto; line-height: 1.6; font-size: 0.92rem; color: #1E293B;">
+        ${em.body_html || em.body_text.replace(/\n/g, '<br>')}
+      </div>
+    `;
+
+    // Re-render list item to mark read
+    loadEmails(activeEmailFolder, activeEmailCategory);
+  } catch (err) {
+    viewer.innerHTML = `<div style="color: #DC2626; padding: 2rem;">Feil: ${err.message}</div>`;
+  }
+}
+
+function renderEmptyEmailViewer() {
+  const viewer = document.getElementById("email-viewer-container");
+  if (!viewer) return;
+  viewer.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 350px; text-align: center; color: #64748B;">
+      <span style="font-size: 3rem; display: block; margin-bottom: 0.75rem;">✉️</span>
+      <h4 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0 0 0.25rem;">Ingen e-post valgt</h4>
+      <p style="font-size: 0.88rem; max-width: 320px; margin: 0 0 1.25rem;">
+        Velg en melding fra listen til venstre, eller skriv en ny e-post med Gemini AI.
+      </p>
+      <button onclick="openComposeEmailModal()" style="background: #0F172A; color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer;">
+        ➕ Skriv ny e-post
+      </button>
+    </div>
+  `;
+}
+
+// Open Compose Modal
+function openComposeEmailModal(recipientEmail = "", recipientName = "", subject = "", body = "", orderId = null, category = "Generell") {
+  const modal = document.getElementById("modal-compose-email");
+  if (!modal) return;
+
+  document.getElementById("compose-recipient-email").value = recipientEmail;
+  document.getElementById("compose-recipient-name").value = recipientName;
+  document.getElementById("compose-subject").value = subject;
+  document.getElementById("compose-body").value = body;
+  document.getElementById("compose-order-id").value = orderId || "";
+  document.getElementById("compose-category").value = category;
+
+  modal.style.display = "flex";
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeComposeEmailModal() {
+  const modal = document.getElementById("modal-compose-email");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("active");
+    modal.setAttribute("aria-hidden", "true");
+  }
+}
+
+// Reply Helper
+function replyToCurrentEmail(senderEmail, senderName, subject, orderId) {
+  const replySubject = subject.startsWith("Sv: ") ? subject : `Sv: ${subject}`;
+  openComposeEmailModal(senderEmail, senderName, replySubject, `\n\n--- Opprinnelig melding fra ${senderName} ---\n`, orderId, "Kundehenvendelse");
+}
+
+// Forward Helper
+function forwardCurrentEmail(subject, bodyText) {
+  const fwdSubject = subject.startsWith("Fwd: ") ? subject : `Fwd: ${subject}`;
+  openComposeEmailModal("", "", fwdSubject, `\n\n--- Videresendt melding ---\n${bodyText}`, null, "Generell");
+}
+
+// Delete Email Helper
+async function deleteEmailItem(emailId) {
+  if (!confirm("Er du sikker på at du vil slette/flytte denne e-posten?")) return;
+  try {
+    const res = await fetch(`/api/emails/${emailId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Kunne ikke slette e-post.");
+    currentSelectedEmailId = null;
+    loadEmails(activeEmailFolder, activeEmailCategory);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// Quick Template Selector in Compose Modal
+const composeTemplateSelect = document.getElementById("compose-template-select");
+if (composeTemplateSelect) {
+  composeTemplateSelect.addEventListener("change", async (e) => {
+    const key = e.target.value;
+    if (!key) return;
+
+    if (emailTemplatesCache.length === 0) {
+      try {
+        const res = await fetch("/api/email-templates");
+        const data = await res.json();
+        emailTemplatesCache = data.templates || [];
+      } catch (err) {}
+    }
+
+    const tpl = emailTemplatesCache.find(t => t.template_key === key);
+    if (tpl) {
+      const recipientName = document.getElementById("compose-recipient-name").value || "Kunde";
+      let bodyText = tpl.body_template.replace(/{customer_name}/g, recipientName).replace(/{order_number}/g, "SRV-1001").replace(/{service_title}/g, "Montering").replace(/{variant_name}/g, "Standard").replace(/{total_price}/g, "1890").replace(/{preferred_date}/g, "2026-08-15").replace(/{time_slot}/g, "09:00 - 12:00").replace(/{street_address}/g, "Fjellveien 14").replace(/{postal_code}/g, "5014").replace(/{city}/g, "Bergen");
+      let subj = tpl.subject_template.replace(/{order_number}/g, "SRV-1001").replace(/{customer_name}/g, recipientName);
+
+      document.getElementById("compose-subject").value = subj;
+      document.getElementById("compose-body").value = bodyText;
+    }
+  });
+}
+
+// AI Email Generation Button
+const btnGenerateEmailAi = document.getElementById("btn-generate-email-ai");
+if (btnGenerateEmailAi) {
+  btnGenerateEmailAi.addEventListener("click", async () => {
+    const prompt = document.getElementById("compose-ai-prompt").value.trim();
+    if (!prompt) {
+      alert("Vennligst skriv en kort instruks om hva e-posten skal inneholde.");
+      return;
+    }
+
+    const recipientName = document.getElementById("compose-recipient-name").value.trim() || "Kunde";
+    const category = document.getElementById("compose-category").value;
+    const orderId = parseInt(document.getElementById("compose-order-id").value) || null;
+
+    btnGenerateEmailAi.disabled = true;
+    btnGenerateEmailAi.textContent = "✨ Skriver e-post...";
+
+    try {
+      const res = await fetch("/api/emails/ai-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, recipient_name: recipientName, category, order_id: orderId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Kunne ikke generere utkast.");
+
+      if (data.subject) document.getElementById("compose-subject").value = data.subject;
+      if (data.body_text) document.getElementById("compose-body").value = data.body_text;
+    } catch (err) {
+      alert("AI Feil: " + err.message);
+    } finally {
+      btnGenerateEmailAi.disabled = false;
+      btnGenerateEmailAi.textContent = "✨ Generer";
+    }
+  });
+}
+
+// Send Email Form Submission
+const formComposeEmail = document.getElementById("form-compose-email");
+if (formComposeEmail) {
+  formComposeEmail.addEventListener("submit", async () => {
+    const recipient_email = document.getElementById("compose-recipient-email").value.trim();
+    const recipient_name = document.getElementById("compose-recipient-name").value.trim();
+    const subject = document.getElementById("compose-subject").value.trim();
+    const body_html = document.getElementById("compose-body").value.trim();
+    const category = document.getElementById("compose-category").value;
+    const related_order_id = parseInt(document.getElementById("compose-order-id").value) || null;
+
+    if (!recipient_email || !subject || !body_html) {
+      alert("Vennligst fyll ut alle påkrevde felt.");
+      return;
+    }
+
+    const btn = document.getElementById("btn-submit-send-email");
+    btn.disabled = true;
+    btn.textContent = "Sender...";
+
+    try {
+      const res = await fetch("/api/emails/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient_email,
+          recipient_name,
+          subject,
+          body_html,
+          body_text: body_html,
+          category,
+          related_order_id,
+          folder: "sent"
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Kunne ikke sende e-post.");
+
+      alert(`✓ ${data.message}`);
+      closeComposeEmailModal();
+      loadEmails("sent");
+    } catch (err) {
+      alert("Feil ved sending: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "✉️ Send E-post nå";
+    }
+  });
+}
+
+// Email Settings Modal Event Listeners
+const btnOpenEmailSettings = document.getElementById("btn-open-email-settings");
+const btnCloseEmailSettings = document.getElementById("btn-close-email-settings");
+const formEmailSettings = document.getElementById("form-email-settings");
+
+if (btnOpenEmailSettings) {
+  btnOpenEmailSettings.addEventListener("click", async () => {
+    const modal = document.getElementById("modal-email-settings");
+    if (!modal) return;
+
+    try {
+      const res = await fetch("/api/email-settings");
+      const data = await res.json();
+      const s = data.settings || {};
+
+      if (document.getElementById("es-host")) document.getElementById("es-host").value = s.smtp_host || "smtp.servida.no";
+      if (document.getElementById("es-port")) document.getElementById("es-port").value = s.smtp_port || 587;
+      if (document.getElementById("es-sender-name")) document.getElementById("es-sender-name").value = s.sender_name || "Servida AS Kundesenter";
+      if (document.getElementById("es-sender-email")) document.getElementById("es-sender-email").value = s.sender_email || "post@servida.no";
+      if (document.getElementById("es-auto-confirm")) document.getElementById("es-auto-confirm").checked = s.auto_order_confirmations === 1;
+      if (document.getElementById("es-auto-dispatch")) document.getElementById("es-auto-dispatch").checked = s.auto_handyman_dispatch === 1;
+      if (document.getElementById("es-auto-receipt")) document.getElementById("es-auto-receipt").checked = s.auto_completion_receipt === 1;
+    } catch (err) {}
+
+    modal.style.display = "flex";
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+  });
+}
+
+if (btnCloseEmailSettings) {
+  btnCloseEmailSettings.addEventListener("click", () => {
+    const modal = document.getElementById("modal-email-settings");
+    if (modal) {
+      modal.style.display = "none";
+      modal.classList.remove("active");
+      modal.setAttribute("aria-hidden", "true");
+    }
+  });
+}
+
+if (formEmailSettings) {
+  formEmailSettings.addEventListener("submit", async () => {
+    const smtp_host = document.getElementById("es-host").value.trim();
+    const smtp_port = parseInt(document.getElementById("es-port").value) || 587;
+    const sender_name = document.getElementById("es-sender-name").value.trim();
+    const sender_email = document.getElementById("es-sender-email").value.trim();
+    const auto_order_confirmations = document.getElementById("es-auto-confirm").checked ? 1 : 0;
+    const auto_handyman_dispatch = document.getElementById("es-auto-dispatch").checked ? 1 : 0;
+    const auto_completion_receipt = document.getElementById("es-auto-receipt").checked ? 1 : 0;
+
+    try {
+      const res = await fetch("/api/email-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          smtp_host,
+          smtp_port,
+          sender_name,
+          sender_email,
+          auto_order_confirmations,
+          auto_handyman_dispatch,
+          auto_completion_receipt
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error("Kunne ikke lagre innstillinger.");
+
+      alert("✓ E-postinnstillinger er lagret!");
+      const modal = document.getElementById("modal-email-settings");
+      if (modal) {
+        modal.style.display = "none";
+        modal.classList.remove("active");
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
+
+// Folder & Category Button Listeners
+document.querySelectorAll(".email-folder-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".email-folder-btn").forEach(b => {
+      b.classList.remove("active");
+      b.style.background = "transparent";
+      b.style.color = "#475569";
+    });
+    btn.classList.add("active");
+    btn.style.background = "#F1F5F9";
+    btn.style.color = "#0F172A";
+
+    const folder = btn.dataset.folder;
+    loadEmails(folder, activeEmailCategory);
+  });
+});
+
+document.querySelectorAll(".email-cat-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".email-cat-btn").forEach(b => {
+      b.classList.remove("active");
+      b.style.background = "transparent";
+      b.style.color = "#475569";
+    });
+    btn.classList.add("active");
+    btn.style.background = "#F8FAFC";
+    btn.style.color = "#0F172A";
+
+    const cat = btn.dataset.cat;
+    loadEmails(activeEmailFolder, cat);
+  });
+});
+
+const emailSearchInput = document.getElementById("email-search-input");
+if (emailSearchInput) {
+  let searchTimer = null;
+  emailSearchInput.addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      loadEmails(activeEmailFolder, activeEmailCategory, e.target.value.trim());
+    }, 300);
+  });
+}
+
+const btnOpenComposeEmail = document.getElementById("btn-open-compose-email");
+if (btnOpenComposeEmail) {
+  btnOpenComposeEmail.addEventListener("click", () => {
+    openComposeEmailModal();
+  });
+}
+
+const btnCloseComposeModal = document.getElementById("btn-close-compose-modal");
+const btnCancelCompose = document.getElementById("btn-cancel-compose");
+if (btnCloseComposeModal) btnCloseComposeModal.addEventListener("click", closeComposeEmailModal);
+if (btnCancelCompose) btnCancelCompose.addEventListener("click", closeComposeEmailModal);
+const btnRefreshEmails = document.getElementById("btn-refresh-emails");
+if (btnRefreshEmails) btnRefreshEmails.addEventListener("click", () => loadEmails());
+
 
 
 
